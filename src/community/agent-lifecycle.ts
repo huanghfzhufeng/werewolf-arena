@@ -260,8 +260,9 @@ async function pickBestLobbyMode(): Promise<string | null> {
 /**
  * Probability-based decision: should this agent queue?
  * Higher probability for agents who have been idle longer.
+ * @internal Exported for testing
  */
-function decideToQueue(agent: Agent): boolean {
+export function decideToQueue(agent: Agent): boolean {
   const c = loadConfig().community;
   const eagerBonus =
     agent.totalGames < c.eagerBonusThreshold ? c.eagerBonusChance : 0;
@@ -273,8 +274,9 @@ function decideToQueue(agent: Agent): boolean {
 /**
  * Pick a game mode for the agent based on simple heuristics.
  * Most agents prefer classic-6p (fast), some prefer larger modes.
+ * @internal Exported for testing
  */
-function pickMode(
+export function pickMode(
   agent: Agent,
   modes: ReturnType<typeof getAllGameModes>
 ): string | null {

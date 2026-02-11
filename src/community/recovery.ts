@@ -29,7 +29,7 @@ export async function recoverZombieGames(): Promise<void> {
         .set({
           status: "finished",
           currentPhase: "game_over",
-          winner: "villager",
+          winner: "draw",
           finishedAt: new Date(),
         })
         .where(eq(games.id, game.id));

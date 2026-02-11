@@ -1,5 +1,4 @@
 "use client";
-import { WOBBLY_PILL, hardShadowSm } from "@/app/design";
 import { PHASE_LABELS } from "@/app/constants";
 
 export function PhaseIndicator({
@@ -12,14 +11,11 @@ export function PhaseIndicator({
   return (
     <div className="text-center mb-6">
       <div
-        className="inline-block px-8 py-3 border-[3px] text-lg font-[family-name:var(--font-kalam)] font-bold transition-all"
+        className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold border transition-all"
         style={{
-          borderRadius: WOBBLY_PILL,
-          borderColor: isNight ? "#2d5da1" : "#e6a817",
-          backgroundColor: isNight ? "#e8eef6" : "#fff9e6",
-          color: isNight ? "#2d5da1" : "#8b6914",
-          ...hardShadowSm,
-          transform: `rotate(${isNight ? "-1deg" : "0.5deg"})`,
+          borderColor: isNight ? "var(--villager)" : "var(--gold)",
+          background: isNight ? "rgba(59,130,246,0.1)" : "rgba(234,179,8,0.1)",
+          color: isNight ? "var(--villager)" : "var(--gold)",
         }}
       >
         {PHASE_LABELS[phase] ?? phase}

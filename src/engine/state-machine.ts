@@ -132,30 +132,20 @@ async function getLastGuardTarget(gameId: string, guardId: string): Promise<stri
   return rows.length > 0 ? rows[0].targetId : null;
 }
 
-// ─── Couple Tracking (in-memory per game loop) ──────────────────
-
-const coupleMap = new Map<string, { lover1: string; lover2: string }>();
+// ─── Couple Tracking (DB-backed) ────────────────────────────────
 
 async function getPartner(gameId: string, playerId: string): Promise<string | null> {
-  // Check in-memory cache first
-  let couple = coupleMap.get(gameId);
+  const [cupidAction] = await db
+    .select()
+    .from(actions)
+    .where(and(eq(actions.gameId, gameId), eq(actions.actionType, "cupid_link")))
+    .limit(1);
+  if (!cupidAction || !cupidAction.targetId || !cupidAction.result) return null;
 
-  // Fallback: recover from DB if not in memory (e.g. after hot-reload)
-  if (!couple) {
-    const [cupidAction] = await db
-      .select()
-      .from(actions)
-      .where(and(eq(actions.gameId, gameId), eq(actions.actionType, "cupid_link")))
-      .limit(1);
-    if (cupidAction && cupidAction.targetId && cupidAction.result) {
-      couple = { lover1: cupidAction.targetId, lover2: cupidAction.result };
-      coupleMap.set(gameId, couple);
-    }
-  }
-
-  if (!couple) return null;
-  if (couple.lover1 === playerId) return couple.lover2;
-  if (couple.lover2 === playerId) return couple.lover1;
+  const lover1 = cupidAction.targetId;
+  const lover2 = cupidAction.result;
+  if (lover1 === playerId) return lover2;
+  if (lover2 === playerId) return lover1;
   return null;
 }
 
@@ -193,7 +183,6 @@ async function runCupidNight(
   const lover1 = result.targetId;
   const lover2 = result.secondTargetId;
   if (lover1 && lover2 && lover1 !== lover2) {
-    coupleMap.set(gameId, { lover1, lover2 });
     await db.insert(actions).values({
       gameId,
       round,
@@ -862,10 +851,10 @@ export async function runGameLoop(gameId: string) {
 
   while (round <= MAX_ROUNDS) {
     // ── NIGHT ──
-    const allForCount = await getAllPlayers(gameId);
+    let roundPlayers = await getAllPlayers(gameId);
     const nightNarration = await narrateNightFall(
       round,
-      allForCount.filter((p) => p.isAlive).length
+      roundPlayers.filter((p) => p.isAlive).length
     );
     emit({
       type: "night_fall",
@@ -882,7 +871,7 @@ export async function runGameLoop(gameId: string) {
     let witchPoisonTarget: string | null = null;
 
     for (const phase of mode.nightPhaseOrder) {
-      const nightPlayers = await getAllPlayers(gameId);
+      const nightPlayers = roundPlayers;
 
       // Judge: "XXX请睁眼"
       const wakeMsg = await narrateRoleWake(phase);
@@ -923,8 +912,9 @@ export async function runGameLoop(gameId: string) {
       await delay(TIMING.PHASE_TRANSITION);
     }
 
-    // Resolve night
-    const preResolvePlayers = await getAllPlayers(gameId);
+    // Resolve night (refresh in case of any DB-level changes)
+    roundPlayers = await getAllPlayers(gameId);
+    const preResolvePlayers = roundPlayers;
     const { deaths: nightDeaths, elderUsedThisRound } = resolveNightActions(
       wolfTarget,
       guardTarget,
@@ -1248,7 +1238,7 @@ export async function runGameLoop(gameId: string) {
 
 async function endGame(
   gameId: string,
-  winner: "werewolf" | "villager",
+  winner: "werewolf" | "villager" | "draw",
   reason: string,
   round: number
 ) {
@@ -1289,7 +1279,6 @@ async function endGame(
   await onGameEnd(gameId, winner, allPlayers).catch((e) => log.error("onGameEnd failed:", e));
 
   // Clean up game state
-  coupleMap.delete(gameId);
   clearGameEvents(gameId);
 
   await delay(TIMING.GAME_OVER);
@@ -1306,23 +1295,22 @@ async function recoverCrashedGame(gameId: string): Promise<void> {
 
     await db
       .update(games)
-      .set({ status: "finished", currentPhase: "game_over", winner: "villager", finishedAt: new Date() })
+      .set({ status: "finished", currentPhase: "game_over", winner: "draw", finishedAt: new Date() })
       .where(eq(games.id, gameId));
 
     const allPlayers = await getAllPlayers(gameId);
-    await addSystemMessage(gameId, game.currentRound, "game_over", "⚠️ 游戏因系统异常终止。");
+    await addSystemMessage(gameId, game.currentRound, "game_over", "⚠️ 游戏因系统异常终止（不计分）。");
 
     emit({
       type: "game_over",
       gameId,
       round: game.currentRound,
       timestamp: new Date().toISOString(),
-      data: { winner: "villager", reason: "游戏异常终止" },
+      data: { winner: "draw", reason: "游戏异常终止" },
     });
 
-    // Release agents from playing status
-    await onGameEnd(gameId, "villager", allPlayers).catch((e) => log.error("Recovery onGameEnd failed:", e));
-    coupleMap.delete(gameId);
+    // Release agents from playing status — draw skips ELO
+    await onGameEnd(gameId, "draw", allPlayers).catch((e) => log.error("Recovery onGameEnd failed:", e));
 
     log.info(`Game ${gameId} recovered. Agents released.`);
   } catch (err) {

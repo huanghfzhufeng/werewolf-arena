@@ -147,10 +147,13 @@ export async function narrateVoteResult(
 }
 
 export async function narrateGameOver(
-  winner: "werewolf" | "villager",
+  winner: "werewolf" | "villager" | "draw",
   reason: string,
   round: number
 ): Promise<string> {
+  if (winner === "draw") {
+    return `⚠️ 游戏异常终止（不计分）。${reason}`;
+  }
   const winnerZh = winner === "werewolf" ? "狼人阵营" : "好人阵营";
   const fallback = `🎮 游戏结束！${reason}`;
   return narrate(

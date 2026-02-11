@@ -53,19 +53,16 @@ export async function buildSystemPrompt(ctx: PromptContext): Promise<string> {
       ? `\n## Known Information\n${ctx.knownInfo.map((info) => `- ${info}`).join("\n")}`
       : "";
 
-  // Parse personality JSON
-  let personalityBlock = ctx.player.personality;
-  try {
-    const p = JSON.parse(ctx.player.personality);
-    personalityBlock = `Character: ${p.character} (from ${p.series})
+  // Build personality block from jsonb column
+  const p = ctx.player.personality;
+  const personalityBlock = p?.character
+    ? `Character: ${p.character} (from ${p.series})
 Catchphrase: "${p.catchphrase}"
 Personality: ${p.trait}
 Speaking Style: ${p.speakingStyle}
 
-You MUST stay in character as ${p.character} at all times. Your speech should reflect this character's unique personality and occasionally use your catchphrase naturally.`;
-  } catch {
-    // fallback to raw string
-  }
+You MUST stay in character as ${p.character} at all times. Your speech should reflect this character's unique personality and occasionally use your catchphrase naturally.`
+    : JSON.stringify(ctx.player.personality);
 
   // Build role list for game rules
   const roleDistribution: Record<string, number> = {};

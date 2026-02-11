@@ -7,7 +7,18 @@ import {
   uuid,
   pgEnum,
   real,
+  jsonb,
 } from "drizzle-orm/pg-core";
+
+/** Shape stored in agents.personality / players.personality jsonb columns */
+export type PersonalityData = {
+  character: string;
+  series: string;
+  avatar: string;
+  trait: string;
+  speakingStyle: string;
+  catchphrase: string;
+};
 
 export const gameStatusEnum = pgEnum("game_status", [
   "lobby",
@@ -62,7 +73,7 @@ export const roleEnum = pgEnum("role", [
   "villager",
 ]);
 
-export const winnerEnum = pgEnum("winner", ["werewolf", "villager"]);
+export const winnerEnum = pgEnum("winner", ["werewolf", "villager", "draw"]);
 
 export const actionTypeEnum = pgEnum("action_type", [
   "seer_check",
@@ -93,9 +104,12 @@ export const agentOwners = pgTable("agent_owners", {
 // ─── Community Tables ───────────────────────────────────────────
 
 export const agents = pgTable("agents", {
+  // Indexes: status (lifecycle tick), ownerId (owner agent list)
+  // Applied via: CREATE INDEX idx_agents_status ON agents(status);
+  //              CREATE INDEX idx_agents_owner ON agents(owner_id);
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  personality: text("personality").notNull(),
+  personality: jsonb("personality").notNull().$type<PersonalityData>(),
   avatar: text("avatar").notNull().default("🎭"),
   status: agentStatusEnum("status").notNull().default("idle"),
   cooldownUntil: timestamp("cooldown_until"),
@@ -151,6 +165,9 @@ export const games = pgTable("games", {
 });
 
 export const players = pgTable("players", {
+  // Index: gameId (getAllPlayers), agentId (recent games lookup)
+  // Applied via: CREATE INDEX idx_players_game ON players(game_id);
+  //              CREATE INDEX idx_players_agent ON players(agent_id);
   id: uuid("id").primaryKey().defaultRandom(),
   gameId: uuid("game_id")
     .notNull()
@@ -159,11 +176,13 @@ export const players = pgTable("players", {
   agentName: text("agent_name").notNull(),
   role: roleEnum("role"),
   isAlive: boolean("is_alive").notNull().default(true),
-  personality: text("personality").notNull(),
+  personality: jsonb("personality").notNull().$type<PersonalityData>(),
   seatNumber: integer("seat_number").notNull(),
 });
 
 export const messages = pgTable("messages", {
+  // Index: (gameId, createdAt) for chat history queries
+  // Applied via: CREATE INDEX idx_messages_game ON messages(game_id, created_at);
   id: uuid("id").primaryKey().defaultRandom(),
   gameId: uuid("game_id")
     .notNull()
@@ -194,6 +213,8 @@ export const votes = pgTable("votes", {
 });
 
 export const actions = pgTable("actions", {
+  // Index: (gameId, actionType) for night resolution queries
+  // Applied via: CREATE INDEX idx_actions_game_type ON actions(game_id, action_type);
   id: uuid("id").primaryKey().defaultRandom(),
   gameId: uuid("game_id")
     .notNull()

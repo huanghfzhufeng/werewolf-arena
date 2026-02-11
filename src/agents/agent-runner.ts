@@ -135,10 +135,8 @@ async function getChatHistory(
   );
 }
 
-/**
- * Parse a player name from LLM output and match to an alive player.
- */
-function resolvePlayerTarget(
+/** @internal Exported for testing */
+export function resolvePlayerTarget(
   text: string,
   allPlayers: Player[],
   excludeId?: string

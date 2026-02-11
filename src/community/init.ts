@@ -36,7 +36,7 @@ export async function initCommunity(): Promise<{ created: boolean }> {
     if (existingNames.has(p.character)) continue;
     await db.insert(agents).values({
       name: p.character,
-      personality: JSON.stringify(p),
+      personality: p,
       avatar: p.avatar,
       status: "idle",
       isSystem: true,

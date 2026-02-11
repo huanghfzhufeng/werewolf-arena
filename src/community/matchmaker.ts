@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, lobbies, lobbyMembers, games, players } from "@/db/schema";
 import type { Agent } from "@/db/schema";
@@ -138,16 +138,14 @@ async function startGameFromLobby(
   // Link lobby to game
   await db.update(lobbies).set({ status: "playing", gameId: game.id }).where(eq(lobbies.id, lobbyId));
 
-  // Load agent data and create players
-  const agentRows = await Promise.all(
-    agentIds.map(async (id) => {
-      const [a] = await db.select().from(agents).where(eq(agents.id, id));
-      return a;
-    })
-  );
+  // Load agent data in a single batch query
+  const agentRows = await db.select().from(agents).where(inArray(agents.id, agentIds));
+  // Preserve the original order from agentIds
+  const agentMap = new Map(agentRows.map((a) => [a.id, a]));
+  const orderedAgents = agentIds.map((id) => agentMap.get(id)!).filter(Boolean);
 
-  for (let i = 0; i < agentRows.length; i++) {
-    const agent = agentRows[i];
+  for (let i = 0; i < orderedAgents.length; i++) {
+    const agent = orderedAgents[i];
     await db.insert(players).values({
       gameId: game.id,
       agentId: agent.id,
@@ -168,7 +166,7 @@ async function startGameFromLobby(
       gameId: game.id,
       modeId,
       modeName: mode.nameZh,
-      agents: agentRows.map((a) => ({ id: a.id, name: a.name, avatar: a.avatar })),
+      agents: orderedAgents.map((a) => ({ id: a.id, name: a.name, avatar: a.avatar })),
     },
   });
 

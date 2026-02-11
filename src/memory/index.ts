@@ -3,6 +3,7 @@ export {
   writeGameReflection,
   writeGameTranscript,
   writeSocialMemory,
+  writeOpponentImpressions,
   pruneMemories,
 } from "./writer";
 export { searchMemories } from "./search";

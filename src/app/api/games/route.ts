@@ -22,7 +22,7 @@ export async function POST(request: Request) {
       await db.insert(players).values({
         gameId: game.id,
         agentName: personalities[i].character,
-        personality: JSON.stringify(personalities[i]),
+        personality: personalities[i],
         seatNumber: i + 1,
       });
     }
@@ -98,12 +98,8 @@ export async function GET(request: Request) {
       createdAt: g.createdAt,
       finishedAt: g.finishedAt,
       players: (playersByGame.get(g.id) ?? []).map((p) => {
-        try {
-          const pers = JSON.parse(p.personality);
-          return { name: p.agentName, avatar: pers.avatar };
-        } catch {
-          return { name: p.agentName, avatar: "🎭" };
-        }
+        const pers = p.personality as Record<string, unknown> | null;
+        return { name: p.agentName, avatar: (pers?.avatar as string) ?? "🎭" };
       }),
     }));
 

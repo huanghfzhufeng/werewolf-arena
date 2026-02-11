@@ -5,7 +5,7 @@ import type { Player } from "@/db/schema";
 import { ROLE_CONFIGS } from "@/engine/roles";
 import type { Role } from "@/engine/roles";
 import { updateAgentPostGame } from "./agent-lifecycle";
-import { writeGameReflection, writeGameTranscript, pruneMemories } from "@/memory";
+import { writeGameReflection, writeGameTranscript, writeOpponentImpressions, pruneMemories } from "@/memory";
 import { createLogger } from "@/lib";
 
 const log = createLogger("GameEnd");
@@ -16,9 +16,27 @@ const log = createLogger("GameEnd");
  */
 export async function onGameEnd(
   gameId: string,
-  winner: "werewolf" | "villager",
+  winner: "werewolf" | "villager" | "draw",
   allPlayers: Player[]
 ): Promise<void> {
+  // Draw games (crash recovery): release agents without ELO changes or memories
+  if (winner === "draw") {
+    for (const player of allPlayers) {
+      if (!player.agentId) continue;
+      await db
+        .update(agents)
+        .set({ status: "idle", cooldownUntil: null, lastGameId: gameId })
+        .where(eq(agents.id, player.agentId));
+    }
+    // Clean up lobby
+    const [lobby] = await db.select().from(lobbies).where(eq(lobbies.gameId, gameId));
+    if (lobby) {
+      await db.delete(lobbyMembers).where(eq(lobbyMembers.lobbyId, lobby.id));
+      await db.update(lobbies).set({ status: "finished" }).where(eq(lobbies.id, lobby.id));
+    }
+    return;
+  }
+
   // Extract key events from system messages
   const keyEvents = await extractKeyEvents(gameId);
 
@@ -66,6 +84,9 @@ export async function onGameEnd(
       () => pruneMemories(player.agentId!)
     ).catch(
       (e) => log.error(`Failed to write reflection for ${player.agentName}:`, e)
+    );
+    writeOpponentImpressions(player.agentId, gameId, player, allPlayers, winner, keyEvents).catch(
+      (e) => log.error(`Failed to write opponent impressions for ${player.agentName}:`, e)
     );
   }
 

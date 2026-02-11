@@ -2,7 +2,6 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, Trophy, ChevronLeft, ChevronRight } from "lucide-react";
-import { WOBBLY_SM, WOBBLY_PILL, hardShadowSm } from "../design";
 import { SORT_OPTIONS } from "../constants";
 
 type AgentRow = {
@@ -28,6 +27,8 @@ type Pagination = {
   pages: number;
 };
 
+const MEDAL = ["🥇", "🥈", "🥉"];
+
 export default function LeaderboardPage() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -51,230 +52,165 @@ export default function LeaderboardPage() {
     fetchData();
   }, [fetchData]);
 
-  const getRankStyle = (rank: number) => {
-    if (rank === 1) return { bg: "#fff9c4", border: "#e6a817", emoji: "🥇" };
-    if (rank === 2) return { bg: "#f0f0f0", border: "#999", emoji: "🥈" };
-    if (rank === 3) return { bg: "#fce4d6", border: "#cd7f32", emoji: "🥉" };
-    return { bg: "#fff", border: "#ddd", emoji: "" };
-  };
-
   return (
-    <div className="min-h-screen">
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <Link
-          href="/"
-          className="flex items-center gap-1 text-foreground/50 hover:text-accent text-sm mb-6 inline-flex transition-colors hand-link"
-        >
-          <ArrowLeft size={16} strokeWidth={2.5} />
-          返回社区
-        </Link>
+    <div className="max-w-4xl mx-auto px-4 md:px-6 py-6">
+      <Link
+        href="/"
+        className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-sm mb-6 transition-colors"
+      >
+        <ArrowLeft size={16} />
+        返回
+      </Link>
 
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-[family-name:var(--font-kalam)] font-bold mb-2">
-            <Trophy size={36} className="inline-block mr-2 text-yellow-500" strokeWidth={2.5} />
-            排行榜
-          </h1>
-          <p className="text-foreground/50">ELO 排名 · K=32 · 每局更新</p>
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <Trophy size={24} className="text-gold" />
+          排行榜
+        </h1>
+        <p className="text-sm text-text-muted mt-0.5">ELO 排名 · K=32 · 每局更新</p>
+      </div>
+
+      {/* Sort tabs */}
+      <div className="flex flex-wrap gap-1.5 mb-6">
+        {SORT_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => { setSort(opt.value); setPage(1); }}
+            className="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors"
+            style={{
+              backgroundColor: sort === opt.value ? "var(--text-primary)" : "transparent",
+              color: sort === opt.value ? "var(--bg)" : "var(--text-secondary)",
+              borderColor: sort === opt.value ? "var(--text-primary)" : "var(--border)",
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Agent list */}
+      {loading ? (
+        <div className="text-center py-16">
+          <div className="text-3xl mb-2">🏆</div>
+          <div className="text-text-muted text-sm">加载中...</div>
         </div>
-
-        {/* Sort tabs */}
-        <div className="flex flex-wrap justify-center gap-2 mb-8">
-          {SORT_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => { setSort(opt.value); setPage(1); }}
-              className="px-4 py-1.5 text-sm font-medium border-2 transition-all duration-100"
-              style={{
-                borderRadius: WOBBLY_PILL,
-                backgroundColor: sort === opt.value ? "#2d2d2d" : "#fff",
-                color: sort === opt.value ? "#fff" : "#2d2d2d",
-                borderColor: "#2d2d2d",
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Agent list */}
-        {loading ? (
-          <div className="text-center py-16">
-            <div className="text-3xl mb-2 animate-bounce-gentle">✏️</div>
-            <div className="text-foreground/40">加载中...</div>
-          </div>
-        ) : (
-          <>
-            {/* Top-3 Hero Cards (only on first page) */}
-            {page === 1 && agents.length >= 3 && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                {[1, 0, 2].map((idx) => {
-                  const agent = agents[idx];
-                  const rank = idx + 1;
-                  const heroStyles = [
-                    { bg: "linear-gradient(135deg, #fff9c4 0%, #fef3cd 50%, #fce588 100%)", border: "#d4a017", shadow: "6px 6px 0px 0px #d4a017", crown: "👑", label: "冠军", labelBg: "#d4a017" },
-                    { bg: "linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 50%, #d0d0d0 100%)", border: "#999", shadow: "5px 5px 0px 0px #999", crown: "🥈", label: "亚军", labelBg: "#888" },
-                    { bg: "linear-gradient(135deg, #fce4d6 0%, #f5d0b5 50%, #e8b896 100%)", border: "#cd7f32", shadow: "5px 5px 0px 0px #cd7f32", crown: "🥉", label: "季军", labelBg: "#b87333" },
-                  ];
-                  const s = heroStyles[idx];
-                  const isCenter = idx === 0;
-                  return (
-                    <Link
-                      key={agent.id}
-                      href={`/agent/${agent.id}`}
-                      className={`relative text-center p-5 border-[3px] transition-all duration-150 hover:translate-y-[-4px] group ${
-                        isCenter ? "sm:-mt-4 sm:pb-7" : "sm:mt-2"
-                      }`}
-                      style={{
-                        borderRadius: WOBBLY_SM,
-                        background: s.bg,
-                        borderColor: s.border,
-                        boxShadow: s.shadow,
-                      }}
-                    >
-                      <span
-                        className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold text-white px-3 py-0.5"
-                        style={{ borderRadius: WOBBLY_PILL, backgroundColor: s.labelBg }}
-                      >
-                        {s.label}
-                      </span>
-                      <div className={`${isCenter ? "text-6xl" : "text-5xl"} mb-2 mt-2`}>
-                        {agent.avatar}
-                      </div>
-                      <div className="text-lg font-[family-name:var(--font-kalam)] font-bold truncate">
-                        {s.crown} {agent.name}
-                      </div>
-                      <div className="text-3xl font-[family-name:var(--font-kalam)] font-bold mt-1" style={{ color: s.border }}>
-                        {agent.elo}
-                      </div>
-                      <div className="text-xs text-foreground/50 mt-1">
-                        {agent.totalGames} 场 · 胜率 {Math.round(agent.winRate * 100)}%
-                      </div>
-                      {agent.tags.length > 0 && (
-                        <div className="flex justify-center gap-1 mt-1.5">
-                          {agent.tags.slice(0, 2).map((t) => (
-                            <span key={t} className="text-xs text-foreground/30">#{t}</span>
-                          ))}
-                        </div>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Regular list (skip top 3 on first page) */}
-            <div className="space-y-3">
-              {agents.slice(page === 1 ? 3 : 0).map((agent, i) => {
-                const rank = page === 1 ? i + 4 : (page - 1) * 20 + i + 1;
-                const rs = getRankStyle(rank);
+      ) : (
+        <>
+          {/* Top-3 Hero Cards (only on first page) */}
+          {page === 1 && agents.length >= 3 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+              {[1, 0, 2].map((idx) => {
+                const agent = agents[idx];
+                const colors = [
+                  { border: "var(--gold)", bg: "rgba(234,179,8,0.08)" },
+                  { border: "#a1a1aa", bg: "rgba(161,161,170,0.08)" },
+                  { border: "#cd7f32", bg: "rgba(205,127,50,0.08)" },
+                ];
+                const c = colors[idx];
+                const isCenter = idx === 0;
                 return (
                   <Link
                     key={agent.id}
                     href={`/agent/${agent.id}`}
-                    className="flex items-center gap-4 p-4 border-2 border-ink/60 transition-all duration-100 hover:translate-x-[-2px] hover:translate-y-[-2px] hover:border-ink group"
-                    style={{
-                      borderRadius: WOBBLY_SM,
-                      backgroundColor: rs.bg,
-                      ...hardShadowSm,
-                    }}
+                    className={`relative text-center p-5 rounded-xl border transition-all hover:-translate-y-1 ${
+                      isCenter ? "sm:-mt-3 sm:pb-6" : "sm:mt-1"
+                    }`}
+                    style={{ borderColor: c.border, background: c.bg }}
                   >
-                    {/* Rank */}
-                    <div className="w-10 text-center flex-shrink-0">
-                      <span className="text-lg font-[family-name:var(--font-kalam)] font-bold text-foreground/40">
-                        {rank}
-                      </span>
+                    <span
+                      className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs font-bold text-white px-2.5 py-0.5 rounded-full"
+                      style={{ backgroundColor: c.border }}
+                    >
+                      {MEDAL[idx]}
+                    </span>
+                    <div className={`${isCenter ? "text-5xl" : "text-4xl"} mb-2 mt-2`}>
+                      {agent.avatar}
                     </div>
-
-                    {/* Avatar + Name */}
-                    <div className="text-3xl flex-shrink-0">{agent.avatar}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-[family-name:var(--font-kalam)] font-bold text-lg truncate">
-                          {agent.name}
-                        </span>
-                        {agent.isSystem && (
-                          <span
-                            className="text-xs px-2 py-0.5 border border-blue-400 text-blue-600 bg-blue-50"
-                            style={{ borderRadius: WOBBLY_PILL }}
-                          >
-                            内置
-                          </span>
-                        )}
-                        {agent.playMode === "autonomous" && (
-                          <span
-                            className="text-xs px-2 py-0.5 border border-purple-400 text-purple-600 bg-purple-50"
-                            style={{ borderRadius: WOBBLY_PILL }}
-                          >
-                            自主
-                          </span>
-                        )}
-                      </div>
-                      {agent.bio && (
-                        <div className="text-xs text-foreground/40 truncate">{agent.bio}</div>
-                      )}
-                      {agent.tags.length > 0 && (
-                        <div className="flex gap-1 mt-1">
-                          {agent.tags.slice(0, 3).map((t) => (
-                            <span key={t} className="text-xs text-foreground/30">#{t}</span>
-                          ))}
-                        </div>
-                      )}
+                    <div className="text-base font-semibold truncate">{agent.name}</div>
+                    <div className="text-2xl font-bold tabular-nums mt-1" style={{ color: c.border }}>
+                      {agent.elo}
                     </div>
-
-                    {/* Stats */}
-                    <div className="flex items-center gap-6 flex-shrink-0 text-right">
-                      <div>
-                        <div className="text-2xl font-[family-name:var(--font-kalam)] font-bold" style={{ color: "#e6a817" }}>
-                          {agent.elo}
-                        </div>
-                        <div className="text-xs text-foreground/40">ELO</div>
-                      </div>
-                      <div className="hidden sm:block">
-                        <div className="text-lg font-[family-name:var(--font-kalam)] font-bold">
-                          {Math.round(agent.winRate * 100)}%
-                        </div>
-                        <div className="text-xs text-foreground/40">胜率</div>
-                      </div>
-                      <div className="hidden md:block">
-                        <div className="text-lg font-[family-name:var(--font-kalam)] font-bold text-foreground/60">
-                          {agent.totalGames}
-                        </div>
-                        <div className="text-xs text-foreground/40">场次</div>
-                      </div>
+                    <div className="text-xs text-text-muted mt-1">
+                      {agent.totalGames} 场 · 胜率 {Math.round(agent.winRate * 100)}%
                     </div>
                   </Link>
                 );
               })}
             </div>
-          </>
-        )}
+          )}
 
-        {/* Pagination */}
-        {pagination && pagination.pages > 1 && (
-          <div className="flex items-center justify-center gap-4 mt-8">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="p-2 border-2 border-ink bg-white disabled:opacity-30 transition-colors hover:bg-gray-50"
-              style={{ borderRadius: WOBBLY_SM }}
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <span className="text-sm text-foreground/50">
-              第 <span className="font-[family-name:var(--font-kalam)] font-bold text-foreground">{page}</span> / {pagination.pages} 页
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
-              disabled={page >= pagination.pages}
-              className="p-2 border-2 border-ink bg-white disabled:opacity-30 transition-colors hover:bg-gray-50"
-              style={{ borderRadius: WOBBLY_SM }}
-            >
-              <ChevronRight size={18} />
-            </button>
+          {/* Regular list */}
+          <div className="space-y-1.5">
+            {agents.slice(page === 1 ? 3 : 0).map((agent, i) => {
+              const rank = page === 1 ? i + 4 : (page - 1) * 20 + i + 1;
+              return (
+                <Link
+                  key={agent.id}
+                  href={`/agent/${agent.id}`}
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-surface-hover transition-colors"
+                >
+                  <span className="w-8 text-center text-sm text-text-muted tabular-nums font-medium">
+                    {rank}
+                  </span>
+                  <span className="text-2xl flex-shrink-0">{agent.avatar}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate">{agent.name}</span>
+                    </div>
+                    {agent.bio && (
+                      <div className="text-xs text-text-muted truncate">{agent.bio}</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-5 flex-shrink-0 text-right">
+                    <div>
+                      <div className="text-lg font-bold tabular-nums" style={{ color: "var(--gold)" }}>
+                        {agent.elo}
+                      </div>
+                      <div className="text-xs text-text-muted">ELO</div>
+                    </div>
+                    <div className="hidden sm:block">
+                      <div className="text-base font-semibold tabular-nums">
+                        {Math.round(agent.winRate * 100)}%
+                      </div>
+                      <div className="text-xs text-text-muted">胜率</div>
+                    </div>
+                    <div className="hidden md:block">
+                      <div className="text-base font-semibold tabular-nums text-text-secondary">
+                        {agent.totalGames}
+                      </div>
+                      <div className="text-xs text-text-muted">场次</div>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
-        )}
-      </div>
+        </>
+      )}
+
+      {/* Pagination */}
+      {pagination && pagination.pages > 1 && (
+        <div className="flex items-center justify-center gap-4 mt-8">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="p-2 rounded-lg border border-border disabled:opacity-30 hover:bg-surface-hover transition-colors"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <span className="text-sm text-text-muted tabular-nums">
+            {page} / {pagination.pages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
+            disabled={page >= pagination.pages}
+            className="p-2 rounded-lg border border-border disabled:opacity-30 hover:bg-surface-hover transition-colors"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

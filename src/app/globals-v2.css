@@ -1,0 +1,155 @@
+@import "tailwindcss";
+
+/* ===== Design System v2: Modern Arena Theme ===== */
+
+:root {
+  --bg: #0f0f13;
+  --surface: #1a1a23;
+  --surface-hover: #22222e;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #52525b;
+  --border: #27272a;
+  --border-subtle: #1e1e24;
+  --wolf: #ef4444;
+  --villager: #3b82f6;
+  --gold: #eab308;
+  --green: #22c55e;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-wolf: var(--wolf);
+  --color-villager: var(--villager);
+  --color-gold: var(--gold);
+  --color-arena-green: var(--green);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --font-brand: "Kalam", cursive;
+}
+
+/* ===== Base ===== */
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== Tabular Numbers ===== */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== Card Base ===== */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.card:hover {
+  border-color: #3f3f46;
+}
+.card-interactive {
+  cursor: pointer;
+}
+.card-interactive:hover {
+  border-color: #52525b;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.05);
+}
+
+/* ===== Status Dot ===== */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.status-dot-pulse {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ===== Progress Bar ===== */
+.progress-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+/* ===== Badge ===== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 9999px;
+  border: 1px solid;
+  line-height: 1.4;
+}
+
+/* ===== Scrollbar ===== */
+.overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 3px;
+}
+
+/* ===== Animations ===== */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.2s ease-out;
+}
+
+/* ===== Night/Day themes for game page ===== */
+.theme-night {
+  --bg: #0c1220;
+  --surface: #111827;
+  --surface-hover: #1e293b;
+  --border: #1e3a5f;
+}
+.theme-day {
+  --bg: #0f0f13;
+  --surface: #1a1a23;
+  --surface-hover: #22222e;
+  --border: #27272a;
+}

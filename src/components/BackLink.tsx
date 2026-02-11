@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 
 export function BackLink({
   href = "/",
-  label = "返回社区",
+  label = "返回",
 }: {
   href?: string;
   label?: string;
@@ -12,9 +12,9 @@ export function BackLink({
   return (
     <Link
       href={href}
-      className="flex items-center gap-1 text-foreground/50 hover:text-accent text-sm mb-6 inline-flex transition-colors hand-link"
+      className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-sm mb-6 transition-colors"
     >
-      <ArrowLeft size={16} strokeWidth={2.5} />
+      <ArrowLeft size={16} />
       {label}
     </Link>
   );

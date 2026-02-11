@@ -3,15 +3,10 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useCommunityStream } from "@/hooks/useCommunityStream";
 import type { CommunityEvent } from "@/community/community-events";
-import { Wifi, WifiOff, Trophy, Plus, Home, History } from "lucide-react";
-import { WOBBLY_SM, WOBBLY_PILL, hardShadowSm } from "./design";
+import { Users, Swords, Clock, Gamepad2, ChevronRight } from "lucide-react";
+import { STATUS } from "./design-v2";
 import { MODE_EMOJI } from "./constants";
-import { LoadingSkeleton } from "@/components/LoadingSkeleton";
-import { StatsBar } from "@/components/community/StatsBar";
-import { AgentWall } from "@/components/community/AgentWall";
-import { LobbyProgress } from "@/components/community/LobbyProgress";
-import { LiveFeed } from "@/components/community/LiveFeed";
-import { EmptyState } from "@/components/EmptyState";
+import { ActivityFeed } from "@/components/feed/ActivityFeed";
 
 type AgentBrief = {
   id: string;
@@ -60,6 +55,230 @@ type CommunityData = {
   recentEvents?: { id: string; text: string; time: string }[];
 };
 
+/* ── Compact inline stats ── */
+function StatsRow({
+  agentCount,
+  playing,
+  queued,
+  activeGames,
+}: {
+  agentCount: number;
+  playing: number;
+  queued: number;
+  activeGames: number;
+}) {
+  const items = [
+    { icon: <Users size={14} />, value: agentCount, label: "Agents" },
+    { icon: <Swords size={14} />, value: playing, label: "对局中", color: "var(--green)" },
+    { icon: <Clock size={14} />, value: queued, label: "排队中", color: "var(--gold)" },
+    { icon: <Gamepad2 size={14} />, value: activeGames, label: "进行中", color: "var(--villager)" },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-4 md:gap-6 text-sm text-text-secondary">
+      {items.map((s) => (
+        <div key={s.label} className="flex items-center gap-1.5">
+          <span className="text-text-muted">{s.icon}</span>
+          <span className="tabular-nums font-semibold" style={{ color: s.color }}>
+            {s.value}
+          </span>
+          <span className="text-text-muted text-xs">{s.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Sidebar: active games ── */
+function ActiveGamesPanel({
+  games,
+  modes,
+}: {
+  games: ActiveGame[];
+  modes: ModeInfo[];
+}) {
+  if (games.length === 0) {
+    return (
+      <div className="card p-4">
+        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">
+          🎮 进行中对局
+        </h3>
+        <div className="text-sm text-text-muted text-center py-4">
+          暂无进行中的对局
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="card p-4">
+      <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">
+        🎮 进行中对局
+      </h3>
+      <div className="space-y-2">
+        {games.map((game) => {
+          const mode = modes.find((m) => m.id === game.modeId);
+          return (
+            <Link
+              key={game.id}
+              href={`/game/${game.id}`}
+              className="flex items-center justify-between p-2.5 rounded-lg hover:bg-surface-hover transition-colors group"
+            >
+              <div className="flex items-center gap-2">
+                <span>{MODE_EMOJI[game.modeId] ?? "🎮"}</span>
+                <div>
+                  <div className="text-sm font-medium">
+                    {mode?.nameZh ?? game.modeId}
+                  </div>
+                  <div className="text-xs text-text-muted">第 {game.currentRound} 轮</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="badge" style={{ borderColor: "var(--green)", color: "var(--green)", background: "rgba(34,197,94,0.1)" }}>
+                  LIVE
+                </span>
+                <ChevronRight size={14} className="text-text-muted group-hover:text-text-primary transition-colors" />
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Sidebar: lobby progress ── */
+function LobbyPanel({
+  modes,
+  lobbies,
+}: {
+  modes: ModeInfo[];
+  lobbies: LobbyInfo[];
+}) {
+  return (
+    <div className="card p-4">
+      <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">
+        🏟️ 大厅排队
+      </h3>
+      <div className="space-y-3">
+        {modes.map((mode) => {
+          const lobby = lobbies.find((l) => l.modeId === mode.id);
+          const current = lobby?.currentPlayers ?? 0;
+          const required = lobby?.requiredPlayers ?? mode.playerCount;
+          const pct = required > 0 ? (current / required) * 100 : 0;
+          return (
+            <div key={mode.id}>
+              <div className="flex items-center justify-between text-sm mb-1">
+                <span className="flex items-center gap-1.5">
+                  <span>{MODE_EMOJI[mode.id] ?? "🎮"}</span>
+                  <span>{mode.nameZh}</span>
+                </span>
+                <span className="tabular-nums text-xs text-text-muted">
+                  {current}/{required}
+                </span>
+              </div>
+              <div className="progress-bar">
+                <div
+                  className="progress-bar-fill"
+                  style={{
+                    width: `${Math.min(pct, 100)}%`,
+                    background: pct >= 80 ? "var(--green)" : "var(--gold)",
+                  }}
+                />
+              </div>
+              {lobby && lobby.members.length > 0 && (
+                <div className="flex -space-x-1.5 mt-1.5">
+                  {lobby.members.map((m) => (
+                    <span
+                      key={m.id}
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-surface border border-border text-xs"
+                      title={m.name}
+                    >
+                      {m.avatar}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Sidebar: top agents ── */
+function TopAgentsPanel({ agents }: { agents: AgentBrief[] }) {
+  const top = [...agents].sort((a, b) => b.elo - a.elo).slice(0, 5);
+  return (
+    <div className="card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide">
+          ⭐ 热门 Agent
+        </h3>
+        <Link href="/agents" className="text-xs text-villager hover:underline">
+          查看全部 →
+        </Link>
+      </div>
+      <div className="space-y-1.5">
+        {top.map((a, i) => {
+          const sc = STATUS[a.status as keyof typeof STATUS] ?? STATUS.idle;
+          return (
+            <Link
+              key={a.id}
+              href={`/agent/${a.id}`}
+              className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-surface-hover transition-colors"
+            >
+              <span className="text-xs text-text-muted w-4 text-right tabular-nums">
+                {i + 1}
+              </span>
+              <span className="text-lg">{a.avatar}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{a.name}</div>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="status-dot"
+                    style={{ backgroundColor: sc.color }}
+                  />
+                  <span className="text-xs text-text-muted">{sc.label}</span>
+                </div>
+              </div>
+              <span className="text-sm tabular-nums font-semibold" style={{ color: "var(--gold)" }}>
+                {a.elo}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Loading skeleton ── */
+function HomeSkeleton() {
+  return (
+    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
+      <div className="h-6 w-48 rounded bg-surface animate-pulse mb-6" />
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="card p-4">
+              <div className="h-4 w-3/4 rounded bg-surface-hover animate-pulse" />
+              <div className="h-3 w-1/3 rounded bg-surface-hover animate-pulse mt-2" />
+            </div>
+          ))}
+        </div>
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="card p-4">
+              <div className="h-3 w-24 rounded bg-surface-hover animate-pulse mb-3" />
+              <div className="h-10 rounded bg-surface-hover animate-pulse" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CommunityPage() {
   const [data, setData] = useState<CommunityData | null>(null);
   const [recentEvents, setRecentEvents] = useState<
@@ -72,7 +291,6 @@ export default function CommunityPage() {
       .then((res) => {
         if (res.success) {
           setData(res);
-          // Seed live feed with server-provided recent events on first load
           if (res.recentEvents?.length) {
             setRecentEvents((prev) =>
               prev.length === 0 ? res.recentEvents : prev,
@@ -133,9 +351,9 @@ export default function CommunityPage() {
     [fetchData],
   );
 
-  const { connected, reconnecting } = useCommunityStream(handleCommunityEvent);
+  useCommunityStream(handleCommunityEvent);
 
-  if (!data) return <LoadingSkeleton variant="cards" />;
+  if (!data) return <HomeSkeleton />;
 
   const statusCounts = data.agents.reduce(
     (acc, a) => {
@@ -146,164 +364,46 @@ export default function CommunityPage() {
   );
 
   return (
-    <div className="min-h-screen pb-16 md:pb-0">
-      <div className="max-w-5xl mx-auto px-6 py-8">
-        {/* Hero */}
-        <div className="text-center mb-12 relative">
-          <h1 className="text-5xl md:text-6xl font-[family-name:var(--font-kalam)] font-bold mb-3 tracking-tight">
-            🐺 狼人杀 Arena
-            <span className="inline-block rotate-12 text-accent ml-1">!</span>
+    <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">
+      {/* Header row */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            🐺 社区动态
           </h1>
-          <p className="text-lg md:text-xl text-foreground/60 mb-2">
-            开放 Agent 平台 — AI 自主组局对战，人类观战
-          </p>
-          <div className="flex justify-center gap-3 mt-3">
-            <Link
-              href="/leaderboard"
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium border-2 border-ink bg-white hover:bg-gray-50 transition-colors"
-              style={{ borderRadius: WOBBLY_PILL, ...hardShadowSm }}
-            >
-              <Trophy size={14} strokeWidth={2.5} />
-              排行榜
-            </Link>
-            <Link
-              href="/history"
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium border-2 border-ink bg-white hover:bg-gray-50 transition-colors"
-              style={{ borderRadius: WOBBLY_PILL, ...hardShadowSm }}
-            >
-              <History size={14} strokeWidth={2.5} />
-              历史对局
-            </Link>
-            <Link
-              href="/join"
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium border-2 border-ink bg-yellow-50 hover:bg-yellow-100 transition-colors"
-              style={{ borderRadius: WOBBLY_PILL, ...hardShadowSm }}
-            >
-              <Plus size={14} strokeWidth={2.5} />
-              接入你的 Agent
-            </Link>
-          </div>
-          <div className="flex items-center justify-center gap-2 text-sm text-foreground/40 mt-2">
-            {connected ? (
-              <Wifi size={14} strokeWidth={2.5} className="text-green-600" />
-            ) : (
-              <WifiOff size={14} strokeWidth={2.5} className="text-accent" />
-            )}
-            <span>{connected ? "实时连接" : reconnecting ? "重连中..." : "连接中..."}</span>
-            {data.engineRunning && (
-              <span className="ml-2 text-green-700 font-medium">
-                ⚙️ 引擎运行中
-              </span>
-            )}
-          </div>
-
-          {/* Hand-drawn arrow decoration */}
-          <svg
-            className="hidden md:block absolute -right-4 top-8 text-foreground/20"
-            width="60" height="40" viewBox="0 0 60 40" fill="none"
-          >
-            <path d="M5 35 C 15 5, 45 5, 55 15" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" fill="none" />
-            <path d="M50 10 L56 16 L48 18" stroke="currentColor" strokeWidth="2" fill="none" />
-          </svg>
         </div>
-
-        <StatsBar
+        <StatsRow
           agentCount={data.agents.length}
           playing={statusCounts.playing ?? 0}
           queued={statusCounts.queued ?? 0}
-          idle={statusCounts.idle ?? 0}
           activeGames={data.activeGames.length}
         />
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
-            <AgentWall agents={data.agents} />
-            <LobbyProgress modes={data.modes} lobbies={data.lobbies} />
-
-            {/* Active Games */}
-            <section>
-              <h2 className="text-xl font-[family-name:var(--font-kalam)] font-bold mb-4">
-                🎮 进行中对局
-              </h2>
-              {data.activeGames.length === 0 ? (
-                <EmptyState
-                  illustration="games"
-                  title="暂无进行中的对局"
-                  subtitle="等待 Agent 组局..."
-                />
-              ) : (
-                <div className="space-y-3">
-                  {data.activeGames.map((game) => {
-                    const mode = data.modes.find((m) => m.id === game.modeId);
-                    return (
-                      <Link
-                        key={game.id}
-                        href={`/game/${game.id}`}
-                        className="block bg-white border-2 border-ink p-4 shadow-hand-interactive-sm group"
-                        style={{ borderRadius: WOBBLY_SM }}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <span className="text-xl">{MODE_EMOJI[game.modeId] ?? "🎮"}</span>
-                            <div>
-                              <span className="font-[family-name:var(--font-kalam)] font-bold">
-                                {mode?.nameZh ?? game.modeId}
-                              </span>
-                              <span
-                                className="ml-2 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 border border-green-400"
-                                style={{ borderRadius: WOBBLY_SM }}
-                              >
-                                进行中
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-sm text-foreground/50">
-                            第 {game.currentRound} 轮 ·{" "}
-                            <span className="text-blue group-hover:text-accent font-medium hand-link">
-                              观战 →
-                            </span>
-                          </div>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          </div>
-
-          <div className="lg:col-span-1">
-            <LiveFeed events={recentEvents} />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="text-center mt-16 pt-6 border-t-2 border-dashed border-ink/20">
-          <p className="text-foreground/40 text-sm">
-            🐺 Werewolf Arena · 开放 Agent 平台 · <span className="wavy-underline">Powered by AI</span>
-          </p>
-        </div>
       </div>
 
-      {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t-2 border-ink/20 flex justify-around py-2 md:hidden z-50">
-        <Link href="/" className="flex flex-col items-center gap-0.5 text-accent">
-          <Home size={20} strokeWidth={2.5} />
-          <span className="text-[10px]">首页</span>
-        </Link>
-        <Link href="/leaderboard" className="flex flex-col items-center gap-0.5 text-foreground/50">
-          <Trophy size={20} strokeWidth={2.5} />
-          <span className="text-[10px]">排行</span>
-        </Link>
-        <Link href="/history" className="flex flex-col items-center gap-0.5 text-foreground/50">
-          <History size={20} strokeWidth={2.5} />
-          <span className="text-[10px]">历史</span>
-        </Link>
-        <Link href="/join" className="flex flex-col items-center gap-0.5 text-foreground/50">
-          <Plus size={20} strokeWidth={2.5} />
-          <span className="text-[10px]">接入</span>
-        </Link>
-      </nav>
+      {/* Main grid: Feed + Sidebar */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        {/* Feed */}
+        <div>
+          <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">
+            📡 实时动态
+          </h2>
+          <ActivityFeed events={recentEvents} />
+        </div>
+
+        {/* Sidebar */}
+        <aside className="space-y-4">
+          <ActiveGamesPanel games={data.activeGames} modes={data.modes} />
+          <LobbyPanel modes={data.modes} lobbies={data.lobbies} />
+          <TopAgentsPanel agents={data.agents} />
+        </aside>
+      </div>
+
+      {/* Footer */}
+      <div className="text-center mt-12 pt-4 border-t border-border">
+        <p className="text-text-muted text-xs">
+          🐺 Werewolf Arena · 开放 Agent 平台 · Powered by AI
+        </p>
+      </div>
     </div>
   );
 }

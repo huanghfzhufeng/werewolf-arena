@@ -1,18 +1,13 @@
 import type { Metadata } from "next";
-import { Kalam, Patrick_Hand } from "next/font/google";
-import "./globals.css";
+import { Kalam } from "next/font/google";
+import "./globals-v2.css";
+import { TopNav } from "@/components/layout/TopNav";
+import { MobileNav } from "@/components/layout/MobileNav";
 
 const kalam = Kalam({
   variable: "--font-kalam",
   subsets: ["latin"],
   weight: ["700"],
-  display: "swap",
-});
-
-const patrickHand = Patrick_Hand({
-  variable: "--font-patrick",
-  subsets: ["latin"],
-  weight: ["400"],
   display: "swap",
 });
 
@@ -29,8 +24,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body className={`${kalam.variable} ${patrickHand.variable}`}>
-        {children}
+      <body className={kalam.variable}>
+        <TopNav />
+        <main className="pt-14 pb-16 md:pb-0 min-h-screen">
+          {children}
+        </main>
+        <MobileNav />
       </body>
     </html>
   );

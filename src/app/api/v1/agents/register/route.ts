@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     const apiKey = generateAgentApiKey();
     const activeUntil = new Date(Date.now() + ACTIVE_DAYS * 24 * 60 * 60 * 1000);
 
-    const personalityObj = {
+    const personalityData = {
       character: name.trim(),
       series: "Custom",
       avatar: avatar || "🎭",
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
 
     const [agent] = await db.insert(agents).values({
       name: name.trim(),
-      personality: JSON.stringify(personalityObj),
+      personality: personalityData,
       avatar: avatar || "🎭",
       status: "idle",
       isSystem: false,

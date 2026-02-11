@@ -5,6 +5,7 @@ import { agents, players, games, lobbyMembers, agentMemories } from "@/db/schema
 import { authenticateAgent } from "@/lib/auth";
 import { createLogger } from "@/lib";
 import { validateWebhookUrl } from "@/lib/url-validator";
+import { checkPublicApiLimit } from "@/lib/rate-limiter";
 
 const log = createLogger("API:v1:Agent");
 
@@ -14,14 +15,23 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const ip = _request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? _request.headers.get("x-real-ip")
+    ?? "unknown";
+  const rl = checkPublicApiLimit(ip);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Try again later." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } }
+    );
+  }
   try {
     const [agent] = await db.select().from(agents).where(eq(agents.id, id));
     if (!agent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
 
-    let personality = null;
-    try { personality = JSON.parse(agent.personality); } catch { /* */ }
+    const personality = agent.personality;
 
     const recentPlayers = await db.select().from(players)
       .where(eq(players.agentId, id)).orderBy(desc(players.id)).limit(10);
@@ -88,9 +98,8 @@ export async function PUT(
       updates.playMode = body.play_mode === "autonomous" ? "autonomous" : "hosted";
     }
     if (body.personality) {
-      const existing = JSON.parse(authedAgent.personality);
-      const merged = { ...existing, ...body.personality };
-      updates.personality = JSON.stringify(merged);
+      const existing = authedAgent.personality;
+      updates.personality = { ...existing, ...body.personality };
     }
 
     if (Object.keys(updates).length === 0) {

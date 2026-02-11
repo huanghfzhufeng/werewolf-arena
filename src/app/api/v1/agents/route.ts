@@ -2,9 +2,20 @@ import { NextResponse } from "next/server";
 import { desc, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { agents } from "@/db/schema";
+import { checkPublicApiLimit } from "@/lib/rate-limiter";
 
 /** GET /api/v1/agents — Public agent list / leaderboard */
 export async function GET(request: Request) {
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? request.headers.get("x-real-ip")
+    ?? "unknown";
+  const rl = checkPublicApiLimit(ip);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Try again later." },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } }
+    );
+  }
   const url = new URL(request.url);
   const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
   const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50")));

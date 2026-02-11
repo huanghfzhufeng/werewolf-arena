@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { ArrowLeft, Trophy, Gamepad2, Target, Zap } from "lucide-react";
-import { WOBBLY, WOBBLY_MD, WOBBLY_SM, WOBBLY_PILL, hardShadow, hardShadowSm } from "../../design";
-import { STATUS_CONFIG, ROLE_LABELS, MODE_LABELS } from "../../constants";
+import { ArrowLeft, Trophy, Gamepad2, Target, Zap, Brain, BookOpen, BarChart3 } from "lucide-react";
+import { STATUS, WINNER_CONFIG } from "../../design-v2";
+import { ROLE_LABELS, MODE_LABELS } from "../../constants";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
+import { Tabs } from "@/components/ui/Tabs";
 
 type PersonalityInfo = {
   character: string;
@@ -43,6 +44,16 @@ type RecentGame = {
   finishedAt: string | null;
 };
 
+type AgentMemory = {
+  id: string;
+  source: string;
+  content: string;
+  tags: string[];
+  importance: number;
+  gameId: string | null;
+  createdAt: string;
+};
+
 export default function AgentPage({
   params,
 }: {
@@ -51,6 +62,7 @@ export default function AgentPage({
   const { id } = use(params);
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
+  const [memories, setMemories] = useState<AgentMemory[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAgent = () => {
@@ -60,6 +72,7 @@ export default function AgentPage({
         if (data.success) {
           setAgent(data.agent);
           setRecentGames(data.recentGames ?? []);
+          setMemories(data.memories ?? []);
         }
         setLoading(false);
       })
@@ -78,264 +91,414 @@ export default function AgentPage({
   if (!agent) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div
-          className="border-[3px] border-accent bg-white p-8 text-center"
-          style={{ borderRadius: WOBBLY, ...hardShadow }}
-        >
+        <div className="card p-8 text-center">
           <div className="text-2xl mb-2">❌</div>
-          <div className="text-xl font-[family-name:var(--font-kalam)] text-accent">
-            Agent 不存在
-          </div>
+          <div className="text-lg font-semibold text-wolf">Agent 不存在</div>
         </div>
       </div>
     );
   }
 
-  const sc = STATUS_CONFIG[agent.status] ?? STATUS_CONFIG.idle;
+  const sc = STATUS[agent.status as keyof typeof STATUS] ?? STATUS.idle;
   const winPercent = Math.round(agent.winRate * 100);
 
   return (
-    <div className="min-h-screen">
-      <div className="max-w-3xl mx-auto px-6 py-8">
-        {/* Back */}
-        <Link
-          href="/"
-          className="flex items-center gap-1 text-foreground/50 hover:text-accent text-sm mb-6 inline-flex transition-colors hand-link"
-        >
-          <ArrowLeft size={16} strokeWidth={2.5} />
-          返回社区
-        </Link>
+    <div className="max-w-4xl mx-auto px-4 md:px-6 py-6">
+      {/* Back */}
+      <Link
+        href="/agents"
+        className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-sm mb-6 transition-colors"
+      >
+        <ArrowLeft size={16} />
+        返回 Agent 列表
+      </Link>
 
-        {/* ===== Profile Header ===== */}
-        <div
-          className="bg-white border-[3px] border-ink p-6 md:p-8 mb-6 tape"
-          style={{ borderRadius: WOBBLY_MD, ...hardShadow, transform: "rotate(-0.5deg)" }}
-        >
-          <div className="flex items-start gap-5">
-            <div
-              className="text-6xl p-3 bg-postit border-2 border-ink/30 flex items-center justify-center"
-              style={{
-                borderRadius: WOBBLY_SM,
-                transform: "rotate(2deg)",
-                ...hardShadowSm,
-              }}
-            >
-              {agent.avatar}
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2 flex-wrap">
-                <h1 className="text-3xl font-[family-name:var(--font-kalam)] font-bold">
-                  {agent.name}
-                </h1>
-                <span
-                  className="px-3 py-1 text-xs font-medium border-2"
-                  style={{
-                    borderRadius: WOBBLY_PILL,
-                    color: sc.color,
-                    backgroundColor: sc.bg,
-                    borderColor: sc.color,
-                  }}
-                >
-                  {sc.label}
-                </span>
-                {agent.isSystem ? (
-                  <span
-                    className="px-2 py-0.5 text-xs border border-blue-400 text-blue-600 bg-blue-50"
-                    style={{ borderRadius: WOBBLY_PILL }}
-                  >
-                    内置
-                  </span>
-                ) : (
-                  <span
-                    className="px-2 py-0.5 text-xs border border-green-400 text-green-600 bg-green-50"
-                    style={{ borderRadius: WOBBLY_PILL }}
-                  >
-                    外部
-                  </span>
-                )}
-                {agent.playMode === "autonomous" && (
-                  <span
-                    className="px-2 py-0.5 text-xs border border-purple-400 text-purple-600 bg-purple-50"
-                    style={{ borderRadius: WOBBLY_PILL }}
-                  >
-                    自主
-                  </span>
-                )}
-              </div>
-              {agent.bio && (
-                <div className="text-sm text-foreground/60 mb-1">
-                  {agent.bio}
-                </div>
-              )}
-              {agent.personality && (
-                <>
-                  <div className="text-sm text-foreground/50 mb-1">
-                    来自《{agent.personality.series}》
-                  </div>
-                  <div className="text-sm text-foreground/40 italic mb-2">
-                    「{agent.personality.catchphrase}」
-                  </div>
-                </>
-              )}
-              {agent.tags && agent.tags.length > 0 && (
-                <div className="flex gap-1.5 mb-1 flex-wrap">
-                  {agent.tags.map((t) => (
-                    <span key={t} className="text-xs text-foreground/40">#{t}</span>
-                  ))}
-                </div>
-              )}
-              <div className="text-xs text-foreground/30">
-                加入社区{" "}
-                {new Date(agent.createdAt).toLocaleDateString("zh-CN")}
-              </div>
-            </div>
+      {/* ===== Profile Header ===== */}
+      <div className="card p-6 md:p-8 mb-6">
+        <div className="flex items-start gap-5">
+          <div className="text-5xl md:text-6xl p-3 bg-surface-hover rounded-xl flex items-center justify-center">
+            {agent.avatar}
           </div>
-        </div>
-
-        {/* ===== Stats ===== */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-          {[
-            { icon: <Zap size={18} strokeWidth={2.5} />, value: agent.elo, label: "ELO", rotation: "0.5deg", color: "#e6a817" },
-            { icon: <Gamepad2 size={18} strokeWidth={2.5} />, value: agent.totalGames, label: "总对局", rotation: "-1deg" },
-            { icon: <Trophy size={18} strokeWidth={2.5} />, value: agent.totalWins, label: "胜场", rotation: "0.8deg", color: "#2ecc71" },
-            { icon: <Target size={18} strokeWidth={2.5} />, value: `${winPercent}%`, label: "胜率", rotation: "-0.5deg", color: "#e6a817" },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="bg-white border-2 border-ink p-5 text-center transition-transform duration-100 hover:scale-105"
-              style={{
-                borderRadius: WOBBLY_SM,
-                transform: `rotate(${stat.rotation})`,
-                ...hardShadowSm,
-              }}
-            >
-              <div className="flex items-center justify-center mb-1 text-foreground/40">
-                {stat.icon}
-              </div>
-              <div
-                className="text-3xl font-[family-name:var(--font-kalam)] font-bold"
-                style={{ color: stat.color ?? "#2d2d2d" }}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2.5 mb-2 flex-wrap">
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+                {agent.name}
+              </h1>
+              <span
+                className="badge"
+                style={{ color: sc.color, borderColor: sc.color, background: sc.bg }}
               >
-                {stat.value}
-              </div>
-              <div className="text-xs text-foreground/50">{stat.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* ===== Win Rate Bar ===== */}
-        {agent.totalGames > 0 && (
-          <div
-            className="bg-white border-2 border-ink p-5 mb-6"
-            style={{ borderRadius: WOBBLY_SM, ...hardShadowSm }}
-          >
-            <div className="flex items-center justify-between text-xs mb-2">
-              <span className="text-foreground/50">胜率</span>
-              <span className="font-[family-name:var(--font-kalam)] font-bold">
-                {agent.totalWins}/{agent.totalGames}
+                {sc.label}
               </span>
             </div>
-            <div className="progress-hand">
-              <div
-                className="progress-hand-fill"
-                style={{ width: `${winPercent}%`, background: "#2ecc71" }}
-              />
+
+            {/* ELO + key stats inline */}
+            <div className="flex items-center gap-4 text-sm mb-2">
+              <span className="tabular-nums font-semibold" style={{ color: "var(--gold)" }}>
+                ELO {agent.elo}
+              </span>
+              <span className="text-text-muted">·</span>
+              <span className="text-text-secondary tabular-nums">{agent.totalGames} 场</span>
+              <span className="text-text-muted">·</span>
+              <span className="text-text-secondary tabular-nums">胜率 {winPercent}%</span>
+            </div>
+
+            {agent.bio && (
+              <div className="text-sm text-text-secondary mb-1">{agent.bio}</div>
+            )}
+            {agent.personality && (
+              <>
+                <div className="text-sm text-text-muted">
+                  来自《{agent.personality.series}》
+                </div>
+                <div className="text-sm text-text-muted italic mt-0.5">
+                  「{agent.personality.catchphrase}」
+                </div>
+              </>
+            )}
+            {agent.tags && agent.tags.length > 0 && (
+              <div className="flex gap-1.5 mt-2 flex-wrap">
+                {agent.tags.map((t) => (
+                  <span key={t} className="text-xs text-text-muted">#{t}</span>
+                ))}
+              </div>
+            )}
+            <div className="text-xs text-text-muted mt-2">
+              加入社区 {new Date(agent.createdAt).toLocaleDateString("zh-CN")}
             </div>
           </div>
-        )}
+        </div>
+      </div>
 
-        {/* ===== Personality ===== */}
-        {agent.personality?.trait && (
-          <div
-            className="border-2 border-ink p-5 mb-6 tack"
-            style={{
-              borderRadius: WOBBLY_MD,
-              backgroundColor: "#fff9c4",
-              transform: "rotate(0.5deg)",
-              ...hardShadowSm,
-            }}
-          >
-            <h2 className="text-sm font-[family-name:var(--font-kalam)] font-bold text-foreground/60 mb-2">
-              🎭 性格特征
-            </h2>
-            <div className="text-sm text-foreground/70 leading-relaxed">
-              {agent.personality.trait}
+      {/* ===== Tabs ===== */}
+      <Tabs
+        tabs={[
+          { key: "overview", label: "概览", icon: <BookOpen size={14} /> },
+          { key: "memory", label: "记忆", icon: <Brain size={14} /> },
+          { key: "games", label: "对局", icon: <Gamepad2 size={14} /> },
+          { key: "data", label: "数据", icon: <BarChart3 size={14} /> },
+        ]}
+      >
+        {(tab) => (
+          <>
+            {tab === "overview" && (
+              <OverviewTab agent={agent} memories={memories} recentGames={recentGames} />
+            )}
+            {tab === "memory" && <MemoryTab memories={memories} />}
+            {tab === "games" && <GamesTab games={recentGames} />}
+            {tab === "data" && <DataTab agent={agent} />}
+          </>
+        )}
+      </Tabs>
+    </div>
+  );
+}
+
+/* ========== Tab Components ========== */
+
+function OverviewTab({
+  agent,
+  memories,
+  recentGames,
+}: {
+  agent: AgentDetail;
+  memories: AgentMemory[];
+  recentGames: RecentGame[];
+}) {
+  const winPercent = Math.round(agent.winRate * 100);
+
+  return (
+    <div className="space-y-6">
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { icon: <Zap size={16} />, value: agent.elo, label: "ELO", color: "var(--gold)" },
+          { icon: <Gamepad2 size={16} />, value: agent.totalGames, label: "总对局" },
+          { icon: <Trophy size={16} />, value: agent.totalWins, label: "胜场", color: "var(--green)" },
+          { icon: <Target size={16} />, value: `${winPercent}%`, label: "胜率", color: "var(--gold)" },
+        ].map((stat) => (
+          <div key={stat.label} className="card p-4 text-center">
+            <div className="flex items-center justify-center mb-1 text-text-muted">
+              {stat.icon}
             </div>
+            <div className="text-2xl font-bold tabular-nums" style={{ color: stat.color }}>
+              {stat.value}
+            </div>
+            <div className="text-xs text-text-muted">{stat.label}</div>
           </div>
-        )}
+        ))}
+      </div>
 
-        {/* ===== Recent Games ===== */}
-        <section>
-          <h2 className="text-xl font-[family-name:var(--font-kalam)] font-bold mb-4">
-            📋 近期对局
-          </h2>
-          {recentGames.length === 0 ? (
+      {/* Win rate bar */}
+      {agent.totalGames > 0 && (
+        <div className="card p-4">
+          <div className="flex items-center justify-between text-xs mb-2">
+            <span className="text-text-muted">胜率</span>
+            <span className="tabular-nums font-semibold">
+              {agent.totalWins}/{agent.totalGames}
+            </span>
+          </div>
+          <div className="progress-bar">
             <div
-              className="text-center py-10 bg-white border-2 border-dashed border-ink/30"
-              style={{ borderRadius: WOBBLY_MD }}
-            >
-              <div className="text-2xl mb-2">📝</div>
-              <div className="text-sm text-foreground/40">暂无对局记录</div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {recentGames.map((game, i) => (
-                <Link
-                  key={game.gameId}
-                  href={`/game/${game.gameId}`}
-                  className="block bg-white border-2 border-ink/60 p-4 shadow-hand-interactive-sm hover:border-ink group"
-                  style={{
-                    borderRadius: WOBBLY_SM,
-                    transform: `rotate(${i % 2 === 0 ? "-0.3deg" : "0.3deg"})`,
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-foreground/30 font-mono">
-                        #{game.gameId.slice(0, 8)}
-                      </span>
-                      <span className="text-sm text-foreground/60">
-                        {MODE_LABELS[game.modeId] ?? game.modeId}
-                      </span>
-                      {game.role && (
-                        <span className="text-sm">
-                          {ROLE_LABELS[game.role] ?? game.role}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {game.status === "finished" && game.winner && (
-                        <span
-                          className="text-xs px-2 py-0.5 border"
-                          style={{
-                            borderRadius: WOBBLY_SM,
-                            color: game.winner === "werewolf" ? "#ff4d4d" : "#2ecc71",
-                            borderColor: game.winner === "werewolf" ? "#ff4d4d" : "#2ecc71",
-                            backgroundColor: game.winner === "werewolf" ? "#fff0f0" : "#f0fff4",
-                          }}
-                        >
-                          {game.winner === "werewolf" ? "🐺 狼胜" : "🏆 好人胜"}
-                        </span>
-                      )}
-                      {game.status === "playing" && (
-                        <span
-                          className="text-xs px-2 py-0.5 border border-green-500 bg-green-50 text-green-700"
-                          style={{ borderRadius: WOBBLY_SM }}
-                        >
-                          进行中
-                        </span>
-                      )}
-                      <span className="text-xs text-foreground/30">
-                        {new Date(game.createdAt).toLocaleDateString("zh-CN")}
-                      </span>
-                    </div>
+              className="progress-bar-fill"
+              style={{ width: `${winPercent}%`, background: "var(--green)" }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Personality */}
+      {agent.personality?.trait && (
+        <div className="card p-4">
+          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
+            🎭 性格特征
+          </h3>
+          <div className="text-sm text-text-secondary leading-relaxed">
+            {agent.personality.trait}
+          </div>
+        </div>
+      )}
+
+      {/* Recent memories preview */}
+      {memories.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
+            🧠 最新记忆
+          </h3>
+          <div className="space-y-2">
+            {memories.slice(0, 3).map((m) => {
+              const sourceLabel = m.source === "reflection" ? "🪞 复盘" : m.source === "social" ? "👥 印象" : "📝 记录";
+              return (
+                <div key={m.id} className="card p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-text-muted">{sourceLabel}</span>
+                    <span className="text-xs text-text-muted">
+                      {new Date(m.createdAt).toLocaleDateString("zh-CN")}
+                    </span>
                   </div>
-                </Link>
-              ))}
+                  <div className="text-sm text-text-secondary line-clamp-2">
+                    {m.content}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Recent games preview */}
+      {recentGames.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
+            📋 最近对局
+          </h3>
+          <div className="space-y-1.5">
+            {recentGames.slice(0, 3).map((game) => (
+              <GameRow key={game.gameId} game={game} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemoryTab({ memories }: { memories: AgentMemory[] }) {
+  if (memories.length === 0) {
+    return (
+      <div className="card p-10 text-center">
+        <div className="text-3xl mb-3">🧠</div>
+        <div className="text-sm text-text-secondary">暂无记忆记录</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {memories.map((m) => {
+        const sourceLabel = m.source === "reflection" ? "🪞 复盘" : m.source === "social" ? "👥 对手印象" : "📝 记录";
+        return (
+          <div key={m.id} className="card p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="badge" style={{ color: "var(--text-secondary)", borderColor: "var(--border)" }}>
+                {sourceLabel}
+              </span>
+              <div className="flex items-center gap-2">
+                {m.gameId && (
+                  <Link
+                    href={`/game/${m.gameId}`}
+                    className="text-xs text-villager hover:underline"
+                  >
+                    对局 #{m.gameId.slice(0, 8)}
+                  </Link>
+                )}
+                <span className="text-xs text-text-muted">
+                  {new Date(m.createdAt).toLocaleDateString("zh-CN")}
+                </span>
+              </div>
             </div>
-          )}
-        </section>
+            <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-line">
+              {m.content}
+            </div>
+            {m.tags.length > 0 && (
+              <div className="flex gap-1.5 mt-2 flex-wrap">
+                {m.tags.map((t) => (
+                  <span key={t} className="text-xs text-text-muted">#{t}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function GamesTab({ games }: { games: RecentGame[] }) {
+  if (games.length === 0) {
+    return (
+      <div className="card p-10 text-center">
+        <div className="text-3xl mb-3">🎮</div>
+        <div className="text-sm text-text-secondary">暂无对局记录</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {games.map((game) => (
+        <GameRow key={game.gameId} game={game} />
+      ))}
+    </div>
+  );
+}
+
+function DataTab({ agent }: { agent: AgentDetail }) {
+  const winPercent = Math.round(agent.winRate * 100);
+  const lossPercent = 100 - winPercent;
+
+  return (
+    <div className="space-y-4">
+      {/* Win/Loss summary */}
+      <div className="card p-5">
+        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">
+          胜负统计
+        </h3>
+        <div className="flex items-center gap-4 mb-3">
+          <div>
+            <div className="text-2xl font-bold tabular-nums" style={{ color: "var(--green)" }}>
+              {agent.totalWins}
+            </div>
+            <div className="text-xs text-text-muted">胜场</div>
+          </div>
+          <div className="flex-1 h-3 rounded-full overflow-hidden flex" style={{ background: "var(--border)" }}>
+            {agent.totalGames > 0 && (
+              <>
+                <div
+                  className="h-full transition-all"
+                  style={{ width: `${winPercent}%`, background: "var(--green)" }}
+                />
+                <div
+                  className="h-full transition-all"
+                  style={{ width: `${lossPercent}%`, background: "var(--wolf)" }}
+                />
+              </>
+            )}
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold tabular-nums" style={{ color: "var(--wolf)" }}>
+              {agent.totalGames - agent.totalWins}
+            </div>
+            <div className="text-xs text-text-muted">负场</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ELO card */}
+      <div className="card p-5">
+        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">
+          ELO 分数
+        </h3>
+        <div className="text-4xl font-bold tabular-nums" style={{ color: "var(--gold)" }}>
+          {agent.elo}
+        </div>
+        <div className="text-xs text-text-muted mt-1">
+          基于对局结果动态计算
+        </div>
+      </div>
+
+      {/* Basic stats */}
+      <div className="card p-5">
+        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">
+          基本信息
+        </h3>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-text-muted">总对局</span>
+            <span className="tabular-nums font-medium">{agent.totalGames}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-text-muted">胜率</span>
+            <span className="tabular-nums font-medium">{winPercent}%</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-text-muted">模式</span>
+            <span className="font-medium">{agent.playMode === "autonomous" ? "自主" : "托管"}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-text-muted">类型</span>
+            <span className="font-medium">{agent.isSystem ? "内置" : "外部"}</span>
+          </div>
+        </div>
       </div>
     </div>
+  );
+}
+
+/* ========== Shared Components ========== */
+
+function GameRow({ game }: { game: RecentGame }) {
+  const wc = game.winner
+    ? WINNER_CONFIG[game.winner as keyof typeof WINNER_CONFIG]
+    : null;
+
+  return (
+    <Link
+      href={`/game/${game.gameId}`}
+      className="flex items-center justify-between p-3 rounded-lg hover:bg-surface-hover transition-colors group"
+    >
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-text-muted font-mono tabular-nums">
+          #{game.gameId.slice(0, 8)}
+        </span>
+        <span className="text-sm text-text-secondary">
+          {MODE_LABELS[game.modeId] ?? game.modeId}
+        </span>
+        {game.role && (
+          <span className="text-sm">{ROLE_LABELS[game.role] ?? game.role}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        {game.status === "finished" && wc && (
+          <span
+            className="badge"
+            style={{ color: wc.color, borderColor: wc.color, background: wc.bg }}
+          >
+            {wc.label}
+          </span>
+        )}
+        {game.status === "playing" && (
+          <span
+            className="badge"
+            style={{ color: "var(--green)", borderColor: "var(--green)", background: "rgba(34,197,94,0.1)" }}
+          >
+            进行中
+          </span>
+        )}
+        <span className="text-xs text-text-muted">
+          {new Date(game.createdAt).toLocaleDateString("zh-CN")}
+        </span>
+      </div>
+    </Link>
   );
 }

@@ -49,7 +49,10 @@ Other players: ${allPlayers.map((p) => `${p.agentName}(${ROLE_CONFIGS[(p.role ??
 Key events:
 ${keyEvents.map((e) => `- ${e}`).join("\n")}
 
-Write a 1-2 sentence self-reflection in Chinese about what happened, what you learned, and what you'd do differently. Be specific about player names and actions.`;
+Write a 2-3 sentence self-reflection in Chinese. You MUST include:
+1. 对手分析: Name at least one opponent and what you noticed about their behavior.
+2. 策略教训: One specific lesson you learned for future games.
+Be specific about player names and actions.`;
 
   try {
     const reflection = await chatCompletion(
@@ -102,7 +105,7 @@ export async function writeGameTranscript(
   });
 }
 
-// ─── Social Memory (future moltbook) ────────────────────────────
+// ─── Social Memory (opponent impressions) ────────────────────
 
 export async function writeSocialMemory(
   agentId: string,
@@ -116,6 +119,64 @@ export async function writeSocialMemory(
     tags,
     importance: 0.3,
   });
+}
+
+/**
+ * After a game, generate a brief impression of each opponent.
+ * These impressions are injected into future prompts when facing the same opponents.
+ */
+export async function writeOpponentImpressions(
+  agentId: string,
+  gameId: string,
+  player: Player,
+  allPlayers: Player[],
+  winner: "werewolf" | "villager",
+  keyEvents: string[]
+): Promise<void> {
+  const role = (player.role ?? "villager") as Role;
+  const won = ROLE_CONFIGS[role].team === winner;
+  const opponents = allPlayers.filter((p) => p.id !== player.id);
+
+  // Ask LLM to generate brief impressions of opponents
+  const opponentList = opponents
+    .map((p) => `${p.agentName}(${ROLE_CONFIGS[(p.role ?? "villager") as Role].nameZh})`)
+    .join(", ");
+
+  const prompt = `You played as ${player.agentName}(${ROLE_CONFIGS[role].nameZh}). ${won ? "You won." : "You lost."}
+Opponents: ${opponentList}
+Key events:
+${keyEvents.slice(0, 8).map((e) => `- ${e}`).join("\n")}
+
+For each opponent, write ONE short Chinese sentence about their play style or notable behavior.
+Format: 「Name: 印象」 per line. Only include opponents you have something meaningful to say about (skip boring ones).`;
+
+  try {
+    const result = await chatCompletion(
+      [{ role: "user", content: prompt }],
+      { temperature: 0.7, maxTokens: 200 }
+    );
+
+    // Parse "Name: impression" lines
+    const lines = result.split("\n").filter((l) => l.includes(":"));
+    for (const line of lines) {
+      const colonIdx = line.indexOf(":");
+      if (colonIdx < 0) continue;
+      const name = line.slice(0, colonIdx).replace(/[\u300c\u300d"]/g, "").trim();
+      const impression = line.slice(colonIdx + 1).trim();
+      if (!name || !impression || impression.length < 4) continue;
+
+      const opponent = opponents.find((p) => p.agentName === name);
+      if (!opponent) continue;
+
+      await writeSocialMemory(
+        agentId,
+        `对 ${name} 的印象: ${impression}`,
+        [name, role, won ? "win" : "loss"]
+      );
+    }
+  } catch (err) {
+    log.warn(`Failed to write opponent impressions for ${player.agentName}:`, err);
+  }
 }
 
 // ─── Pruning ────────────────────────────────────────────────────

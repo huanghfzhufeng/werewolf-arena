@@ -3,11 +3,24 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { agentOwners } from "@/db/schema";
 import { generateOwnerApiKey, createLogger } from "@/lib";
+import { checkOwnerRegisterLimit } from "@/lib/rate-limiter";
 
 const log = createLogger("API:v1:OwnerRegister");
 
 export async function POST(request: Request) {
   try {
+    // Rate limit by IP
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      ?? request.headers.get("x-real-ip")
+      ?? "unknown";
+    const rl = checkOwnerRegisterLimit(ip);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "Too many registration requests. Try again later." },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } }
+      );
+    }
+
     const body = await request.json();
     const { display_name, email } = body;
 

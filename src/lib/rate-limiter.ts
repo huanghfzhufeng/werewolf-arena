@@ -74,6 +74,16 @@ export function checkHeartbeatLimit(agentId: string): RateLimitResult {
   return checkRateLimit(`heartbeat:${agentId}`, 60, ONE_HOUR_MS);
 }
 
+/** Owner register endpoint: 5 requests per hour per IP */
+export function checkOwnerRegisterLimit(ip: string): RateLimitResult {
+  return checkRateLimit(`owner_register:${ip}`, 5, ONE_HOUR_MS);
+}
+
+/** Public API endpoints (leaderboard, profile): 120 requests per minute per IP */
+export function checkPublicApiLimit(ip: string): RateLimitResult {
+  return checkRateLimit(`public:${ip}`, 120, 60_000);
+}
+
 /** For testing: clear all rate limit state */
 export function _resetAll(): void {
   buckets.clear();

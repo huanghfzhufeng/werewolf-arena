@@ -1,17 +1,16 @@
 "use client";
 import { useRef, useEffect } from "react";
-import { Eye, EyeOff, Sparkles } from "lucide-react";
-import { WOBBLY_MD, WOBBLY_SM, hardShadowSm } from "@/app/design";
+import { Sparkles } from "lucide-react";
 import type { FeedItem, PlayerInfo } from "./types";
 
 function RoundSeparator({ round }: { round: number }) {
   return (
     <div className="flex items-center gap-3 py-2 my-1">
-      <div className="flex-1 border-t-2 border-dashed border-ink/15" />
-      <span className="text-xs font-[family-name:var(--font-kalam)] font-bold text-foreground/35 whitespace-nowrap">
+      <div className="flex-1 border-t border-border" />
+      <span className="text-xs font-semibold text-text-muted whitespace-nowrap">
         第 {round} 轮
       </span>
-      <div className="flex-1 border-t-2 border-dashed border-ink/15" />
+      <div className="flex-1 border-t border-border" />
     </div>
   );
 }
@@ -20,20 +19,10 @@ export function ChatFeed({
   feed,
   players,
   thinkingPlayerId,
-  showPrivate,
-  setShowPrivate,
-  showGodView,
-  setShowGodView,
-  gameStatus,
 }: {
   feed: FeedItem[];
   players: PlayerInfo[];
   thinkingPlayerId: string | null;
-  showPrivate: boolean;
-  setShowPrivate: (v: boolean) => void;
-  showGodView: boolean;
-  setShowGodView: (v: boolean) => void;
-  gameStatus: string;
 }) {
   const feedEndRef = useRef<HTMLDivElement>(null);
 
@@ -46,49 +35,20 @@ export function ChatFeed({
 
   const thinkingPlayerInfo = thinkingPlayerId ? getPlayer(thinkingPlayerId) : null;
 
-  const filteredFeed = feed.filter((item) => {
-    if (item.isPrivate && !showPrivate) return false;
-    if (item.kind === "seer_result" && !showGodView && gameStatus !== "finished") return false;
-    return true;
-  });
 
   let lastRound = -1;
 
   return (
     <div className="lg:col-span-3">
-      <div
-        className="bg-white border-2 border-ink p-4"
-        style={{ borderRadius: WOBBLY_MD, ...hardShadowSm }}
-      >
+      <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-[family-name:var(--font-kalam)] font-bold text-lg">
+          <h2 className="font-semibold text-base">
             📜 对局实况
           </h2>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-1.5 text-xs text-foreground/50 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showPrivate}
-                onChange={(e) => setShowPrivate(e.target.checked)}
-                className="w-3.5 h-3.5 accent-accent"
-              />
-              狼人密语
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-foreground/50 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showGodView}
-                onChange={(e) => setShowGodView(e.target.checked)}
-                className="w-3.5 h-3.5 accent-blue"
-              />
-              {showGodView ? <Eye size={12} strokeWidth={2.5} /> : <EyeOff size={12} strokeWidth={2.5} />}
-              上帝视角
-            </label>
-          </div>
         </div>
 
-        <div className="max-h-[60vh] md:max-h-[550px] overflow-y-auto space-y-2 pr-1 notebook-lines">
-          {filteredFeed.map((item) => {
+        <div className="max-h-[60vh] md:max-h-[550px] overflow-y-auto space-y-2 pr-1">
+          {feed.map((item) => {
             const speaker = getPlayer(item.playerId);
 
             // Round separator
@@ -103,7 +63,7 @@ export function ChatFeed({
               return (
                 <div key={item.id}>
                   {separator}
-                  <div className="text-center py-3 text-sm text-foreground/40 italic">
+                  <div className="text-center py-3 text-sm text-text-muted italic">
                     <Sparkles size={14} className="inline mr-1" strokeWidth={2.5} />
                     {item.content}
                   </div>
@@ -116,7 +76,7 @@ export function ChatFeed({
               return (
                 <div key={item.id}>
                   {separator}
-                  <div className="text-center py-2 text-sm font-medium" style={{ color: "#e6a817" }}>
+                  <div className="text-center py-2 text-sm font-medium" style={{ color: "var(--gold)" }}>
                     {item.content}
                   </div>
                 </div>
@@ -130,13 +90,13 @@ export function ChatFeed({
                 <div key={item.id}>
                   {separator}
                   <div className="py-1 px-3">
-                    <div className="flex items-center gap-2 text-xs text-foreground/50">
+                    <div className="flex items-center gap-2 text-xs text-text-muted">
                       <span>{getAvatar(item.playerId)}</span>
-                      <span className="font-medium text-foreground/70">{speaker?.agentName}</span>
+                      <span className="font-medium text-text-secondary">{speaker?.agentName}</span>
                       <span>➡️ {item.content}</span>
                     </div>
                     {reason && (
-                      <div className="text-xs text-foreground/40 ml-7 mt-0.5 italic">
+                      <div className="text-xs text-text-muted ml-7 mt-0.5 italic">
                         「{reason}」
                       </div>
                     )}
@@ -154,20 +114,14 @@ export function ChatFeed({
                     <span className="text-xl flex-shrink-0 mt-0.5">{getAvatar(item.playerId)}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="font-medium text-sm text-accent">
+                        <span className="font-medium text-sm text-wolf">
                           {speaker?.agentName ?? "???"}
                         </span>
-                        <span
-                          className="text-[10px] px-1.5 py-0.5 bg-accent/10 text-accent border border-accent/30"
-                          style={{ borderRadius: WOBBLY_SM }}
-                        >
+                        <span className="badge" style={{ color: "var(--wolf)", borderColor: "var(--wolf)", background: "rgba(239,68,68,0.1)" }}>
                           遗言
                         </span>
                       </div>
-                      <div
-                        className="text-sm leading-relaxed px-3 py-2 inline-block max-w-full bg-accent/5 border-2 border-accent/30 text-foreground/70 italic"
-                        style={{ borderRadius: WOBBLY_SM }}
-                      >
+                      <div className="text-sm leading-relaxed px-3 py-2 inline-block max-w-full rounded-lg border border-wolf/20 bg-wolf/5 text-text-secondary italic">
                         {item.content}
                       </div>
                     </div>
@@ -183,8 +137,7 @@ export function ChatFeed({
                   {separator}
                   <div className="flex items-center gap-2 py-1 px-3 text-xs">
                     <span>🔮</span>
-                    <span className="text-blue">{item.content}</span>
-                    <span className="text-foreground/30">(上帝视角)</span>
+                    <span className="text-villager">{item.content}</span>
                   </div>
                 </div>
               );
@@ -200,11 +153,8 @@ export function ChatFeed({
               return (
                 <div key={item.id}>
                   {separator}
-                  <div
-                    className="bg-muted/30 border-2 border-ink/20 p-4 my-2"
-                    style={{ borderRadius: WOBBLY_SM }}
-                  >
-                    <div className="text-xs font-[family-name:var(--font-kalam)] font-bold text-foreground/60 mb-2">
+                  <div className="bg-surface-hover rounded-xl p-4 my-2">
+                    <div className="text-xs font-semibold text-text-muted mb-2">
                       🗳️ 投票统计
                     </div>
                     {tally
@@ -212,19 +162,20 @@ export function ChatFeed({
                       .map((t, ti) => (
                         <div key={`${t.targetName}-${ti}`} className="mb-1.5">
                           <div className="flex items-center justify-between text-xs mb-0.5">
-                            <span className="text-foreground/70">{t.targetName}</span>
-                            <span className="text-foreground/40">
+                            <span className="text-text-secondary">{t.targetName}</span>
+                            <span className="text-text-muted">
                               {t.count} 票（{t.voters.join("、")}）
                             </span>
                           </div>
-                          <div className="progress-hand">
+                          <div className="progress-bar">
                             <div
-                              className="progress-hand-fill"
+                              className="progress-bar-fill"
                               style={{
                                 width: `${Math.min(
                                   (t.count / Math.max(...tally.map((x) => x.count), 1)) * 100,
                                   100,
                                 )}%`,
+                                background: "var(--gold)",
                               }}
                             />
                           </div>
@@ -243,25 +194,21 @@ export function ChatFeed({
                   <span className="text-xl flex-shrink-0 mt-0.5">{getAvatar(item.playerId)}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="font-medium text-sm text-blue">
+                      <span className="font-medium text-sm text-villager">
                         {speaker?.agentName ?? "???"}
                       </span>
                       {item.isPrivate && (
-                        <span
-                          className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 border border-purple-300"
-                          style={{ borderRadius: WOBBLY_SM }}
-                        >
+                        <span className="badge" style={{ color: "#a855f7", borderColor: "#a855f7", background: "rgba(168,85,247,0.1)" }}>
                           密语
                         </span>
                       )}
                     </div>
                     <div
-                      className={`text-sm leading-relaxed px-3 py-2 inline-block max-w-full border-2 ${
+                      className={`text-sm leading-relaxed px-3 py-2 inline-block max-w-full rounded-lg border ${
                         item.isPrivate
-                          ? "bg-purple-50 border-purple-300/50 text-purple-900"
-                          : "bg-white border-ink/20 text-foreground/80"
+                          ? "bg-purple-500/10 border-purple-500/20 text-purple-300"
+                          : "bg-surface border-border text-text-secondary"
                       }`}
-                      style={{ borderRadius: WOBBLY_SM }}
                     >
                       {item.content}
                     </div>
@@ -278,14 +225,11 @@ export function ChatFeed({
                 {thinkingPlayerInfo.parsedPersonality?.avatar ?? "🎭"}
               </span>
               <div>
-                <div className="text-sm text-foreground/50 mb-0.5">
+                <div className="text-sm text-text-muted mb-0.5">
                   {thinkingPlayerInfo.agentName}
                 </div>
-                <div
-                  className="bg-muted/30 border-2 border-dashed border-ink/20 px-3 py-2 inline-block"
-                  style={{ borderRadius: WOBBLY_SM }}
-                >
-                  <span className="text-foreground/40 text-sm">
+                <div className="bg-surface-hover border border-dashed border-border rounded-lg px-3 py-2 inline-block">
+                  <span className="text-text-muted text-sm">
                     思考中
                     <span className="animate-pulse">……</span>
                   </span>
@@ -295,8 +239,8 @@ export function ChatFeed({
           )}
 
           {feed.length === 0 && !thinkingPlayerId && (
-            <div className="text-foreground/30 text-center py-12">
-              <div className="text-2xl mb-2 animate-bounce-gentle">📝</div>
+            <div className="text-text-muted text-center py-12">
+              <div className="text-2xl mb-2">📝</div>
               等待游戏开始...
             </div>
           )}

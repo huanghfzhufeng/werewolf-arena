@@ -1,6 +1,6 @@
 "use client";
-import { WOBBLY_MD, WOBBLY_SM, hardShadow } from "@/app/design";
 import { ROLE_LABELS } from "@/app/constants";
+import { WINNER_CONFIG } from "@/app/design-v2";
 import type { PlayerInfo } from "./types";
 
 export function GameOverBanner({
@@ -10,39 +10,34 @@ export function GameOverBanner({
   winner: string;
   players: PlayerInfo[];
 }) {
+  const wc = WINNER_CONFIG[winner as keyof typeof WINNER_CONFIG] ?? WINNER_CONFIG.draw;
+
   return (
-    <div
-      className="mb-8 p-6 bg-white border-[3px] border-ink text-center tape"
-      style={{ borderRadius: WOBBLY_MD, ...hardShadow }}
-    >
+    <div className="card p-6 mb-6 text-center">
       <div className="text-5xl mb-3">
-        {winner === "werewolf" ? "🐺" : "🏆"}
+        {winner === "werewolf" ? "🐺" : winner === "draw" ? "⚠️" : "🏆"}
       </div>
-      <div
-        className="text-3xl font-[family-name:var(--font-kalam)] font-bold mb-2"
-        style={{ color: winner === "werewolf" ? "#ff4d4d" : "#2ecc71" }}
-      >
-        {winner === "werewolf" ? "狼人阵营" : "好人阵营"} 获胜！
+      <div className="text-2xl font-bold mb-2" style={{ color: wc.color }}>
+        {winner === "werewolf" ? "狼人阵营获胜！" : winner === "draw" ? "游戏异常终止（不计分）" : "好人阵营获胜！"}
       </div>
-      <div className="flex justify-center gap-3 flex-wrap mt-4">
+      <div className="flex justify-center gap-2 flex-wrap mt-4">
         {players.map((p) => (
           <div
             key={p.id}
-            className={`px-3 py-2 text-sm border-2 ${
+            className={`px-3 py-2 text-sm rounded-lg border ${
               p.isAlive
-                ? "bg-white border-ink"
-                : "bg-muted/50 border-ink/30 opacity-60"
+                ? "bg-surface border-border"
+                : "bg-surface/50 border-border opacity-50"
             }`}
-            style={{ borderRadius: WOBBLY_SM }}
           >
             <span className="mr-1">
               {p.parsedPersonality?.avatar ?? "🎭"}
             </span>
-            <span className={!p.isAlive ? "line-through text-foreground/40" : ""}>
+            <span className={!p.isAlive ? "line-through text-text-muted" : ""}>
               {p.agentName}
             </span>
             {p.role && (
-              <span className="ml-2 text-xs text-foreground/50">
+              <span className="ml-2 text-xs text-text-muted">
                 {ROLE_LABELS[p.role] ?? p.role}
               </span>
             )}

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, players, games } from "@/db/schema";
+import { agents, players, games, agentMemories } from "@/db/schema";
 import { createLogger } from "@/lib";
 
 const log = createLogger("API:Agent");
@@ -20,13 +20,7 @@ export async function GET(
       );
     }
 
-    // Parse personality for frontend
-    let personality = null;
-    try {
-      personality = JSON.parse(agent.personality);
-    } catch {
-      // ignore
-    }
+    const personality = agent.personality;
 
     // Recent games via players table
     const recentPlayers = await db
@@ -56,6 +50,14 @@ export async function GET(
       })
     );
 
+    // Recent memories (reflections + social impressions)
+    const memories = await db
+      .select()
+      .from(agentMemories)
+      .where(eq(agentMemories.agentId, id))
+      .orderBy(desc(agentMemories.createdAt))
+      .limit(10);
+
     return NextResponse.json({
       success: true,
       agent: {
@@ -76,6 +78,15 @@ export async function GET(
         tags: agent.tags,
       },
       recentGames: recentGames.filter(Boolean),
+      memories: memories.map((m) => ({
+        id: m.id,
+        source: m.source,
+        content: m.content,
+        tags: m.tags,
+        importance: m.importance,
+        gameId: m.gameId,
+        createdAt: m.createdAt,
+      })),
     });
   } catch (error) {
     log.error("Failed to get agent:", error);

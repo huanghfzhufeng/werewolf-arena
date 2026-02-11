@@ -11,7 +11,7 @@ export type PlayerInfo = {
   seatNumber: number;
   isAlive: boolean;
   role?: string;
-  personality?: string;
+  personality?: PersonalityInfo | string | null;
   parsedPersonality?: PersonalityInfo;
 };
 
@@ -43,17 +43,15 @@ export type GameState = {
   modeId?: string;
 };
 
-export function parsePersonality(raw?: string): PersonalityInfo | undefined {
+export function parsePersonality(raw?: PersonalityInfo | Record<string, unknown> | string | null): PersonalityInfo | undefined {
   if (!raw) return undefined;
-  try {
-    const p = JSON.parse(raw);
-    return {
-      character: p.character ?? "",
-      series: p.series ?? "",
-      avatar: p.avatar ?? "🎭",
-      catchphrase: p.catchphrase ?? "",
-    };
-  } catch {
-    return undefined;
-  }
+  // If it's already an object (jsonb column), extract fields directly
+  const p = typeof raw === "string" ? (() => { try { return JSON.parse(raw); } catch { return null; } })() : raw;
+  if (!p || typeof p !== "object") return undefined;
+  return {
+    character: (p as Record<string, unknown>).character as string ?? "",
+    series: (p as Record<string, unknown>).series as string ?? "",
+    avatar: (p as Record<string, unknown>).avatar as string ?? "🎭",
+    catchphrase: (p as Record<string, unknown>).catchphrase as string ?? "",
+  };
 }
