@@ -13,7 +13,11 @@ export type GameEventType =
   | "hunter_shoot"
   | "cupid_link"
   | "wolf_king_revenge"
-  | "white_wolf_explode";
+  | "white_wolf_explode"
+  | "knight_check"
+  | "idiot_reveal"
+  | "enchant_action"
+  | "dreamweaver_check";
 
 export type GameEvent = {
   type: GameEventType;

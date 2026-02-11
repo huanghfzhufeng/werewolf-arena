@@ -67,9 +67,11 @@ export const phaseEnum = pgEnum("phase", [
   "lobby",
   "night_cupid",
   "night_werewolf",
+  "night_enchant",
   "night_seer",
   "night_witch",
   "night_guard",
+  "night_dreamweaver",
   "day_announce",
   "day_discuss",
   "day_vote",
@@ -81,12 +83,16 @@ export const roleEnum = pgEnum("role", [
   "werewolf",
   "wolf_king",
   "white_wolf",
+  "enchantress",
   "seer",
   "witch",
   "guard",
   "hunter",
   "elder",
   "cupid",
+  "knight",
+  "idiot",
+  "dreamweaver",
   "madman",
   "villager",
 ]);
@@ -106,6 +112,11 @@ export const actionTypeEnum = pgEnum("action_type", [
   "wolf_king_revenge",
   // Track elder's passive extra life usage to survive reloads
   "elder_extra_life",
+  // New roles
+  "knight_check",
+  "idiot_reveal",
+  "enchant_target",
+  "dreamweaver_check",
 ]);
 
 // ─── Owner Table ────────────────────────────────────────────────

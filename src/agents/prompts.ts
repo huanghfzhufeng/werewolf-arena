@@ -250,6 +250,28 @@ export function buildUserPrompt(ctx: PromptContext): string {
     case "cupid_link":
       return `${actionBody("cupid_link")}\n\nAvailable players: ${targetList(ctx, otherAlive)}`;
 
+    case "knight_speak":
+      return `${history}\n\n${actionBody("knight_speak")}\n\nAvailable flip targets: ${targetList(ctx, otherAlive)}`;
+
+    case "enchant_target": {
+      const nonWolves = ctx.allPlayers.filter(
+        (p) => p.isAlive && p.role && !isWerewolfTeam(p.role as Role)
+      );
+      return `## Enchantress Night Phase\n${actionBody("enchant_target")}\n\nAvailable targets: ${nonWolves.map((p) => p.agentName).join(", ")}`;
+    }
+
+    case "dreamweaver_check": {
+      const lastPairKey = ctx.extraContext?.lastDreamweaverPairKey as string | null;
+      let info = `${actionBody("dreamweaver_check")}\n\nAvailable targets: ${targetList(ctx, otherAlive)}`;
+      if (lastPairKey) {
+        const [id1, id2] = lastPairKey.split(":");
+        const name1 = ctx.allPlayers.find((p) => p.id === id1)?.agentName ?? "?";
+        const name2 = ctx.allPlayers.find((p) => p.id === id2)?.agentName ?? "?";
+        info += `\n\n⚠️ Last night you checked: ${name1} and ${name2}. You CANNOT choose the same pair again.`;
+      }
+      return info;
+    }
+
     case "last_words":
       return actionBody("last_words");
 

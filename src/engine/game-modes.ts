@@ -6,8 +6,10 @@ export type NightPhase =
   | "night_cupid"
   | "night_guard"
   | "night_werewolf"
+  | "night_enchant"
   | "night_seer"
-  | "night_witch";
+  | "night_witch"
+  | "night_dreamweaver";
 
 export type GameMode = {
   id: string;

@@ -5,6 +5,7 @@ export type GameEventType =
   | "death"
   | "role_reveal"
   | "seer_result"
+  | "dreamweaver_result"
   | "game_over"
   | "game_start"
   | "thinking"
@@ -14,7 +15,10 @@ export type GameEventType =
   | "day_break"
   | "witch_action"
   | "hunter_shoot"
-  | "wolf_king_revenge";
+  | "wolf_king_revenge"
+  | "knight_check"
+  | "idiot_reveal"
+  | "enchant_action";
 
 export type GameEvent = {
   type: GameEventType;

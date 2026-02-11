@@ -32,9 +32,11 @@ export type Phase =
   | "lobby"
   | "night_cupid"
   | "night_werewolf"
+  | "night_enchant"
   | "night_seer"
   | "night_witch"
   | "night_guard"
+  | "night_dreamweaver"
   | "day_announce"
   | "day_discuss"
   | "day_vote"
@@ -48,6 +50,7 @@ type DeathCause =
   | "wolf_king_revenge"
   | "white_wolf_explode"
   | "couple_heartbreak"
+  | "knight_check"
   | "vote";
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -130,6 +133,24 @@ async function getLastGuardTarget(gameId: string, guardId: string): Promise<stri
     .orderBy(desc(actions.createdAt))
     .limit(1);
   return rows.length > 0 ? rows[0].targetId : null;
+}
+
+// ─── Idiot / Knight State Queries ────────────────────────────────
+
+async function hasIdiotRevealed(gameId: string): Promise<boolean> {
+  const rows = await db
+    .select()
+    .from(actions)
+    .where(and(eq(actions.gameId, gameId), eq(actions.actionType, "idiot_reveal")));
+  return rows.length > 0;
+}
+
+async function hasKnightUsedCheck(gameId: string): Promise<boolean> {
+  const rows = await db
+    .select()
+    .from(actions)
+    .where(and(eq(actions.gameId, gameId), eq(actions.actionType, "knight_check")));
+  return rows.length > 0;
 }
 
 // ─── Couple Tracking (DB-backed) ────────────────────────────────
@@ -432,7 +453,8 @@ async function runWitchNight(
 async function runSeerNight(
   gameId: string,
   round: number,
-  allPlayers: Player[]
+  allPlayers: Player[],
+  enchanted: boolean = false
 ): Promise<void> {
   await updatePhase(gameId, "night_seer");
   const seer = allPlayers.find((p) => p.isAlive && p.role === "seer");
@@ -460,9 +482,15 @@ async function runSeerNight(
     const target = allPlayers.find((p) => p.id === result.targetId);
     // Madman appears as "good" to seer
     const targetRole = target?.role as Role | undefined;
-    const isWolf = targetRole
+    let isWolf = targetRole
       ? (isWerewolfTeam(targetRole) && targetRole !== "madman")
       : false;
+
+    // If enchanted, randomize the result — seer gets unreliable info
+    if (enchanted) {
+      isWolf = Math.random() < 0.5;
+    }
+
     await db.insert(actions).values({
       gameId,
       round,
@@ -492,7 +520,188 @@ async function runSeerNight(
   }
 }
 
-// ─── Night Resolution ───────────────────────────────────────────
+// ─── Enchantress Night Phase ─────────────────────────────────────
+
+async function runEnchantNight(
+  gameId: string,
+  round: number,
+  allPlayers: Player[]
+): Promise<string | null> {
+  await updatePhase(gameId, "night_enchant");
+  const enchantress = allPlayers.find(
+    (p) => p.isAlive && p.role === "enchantress"
+  );
+  if (!enchantress) return null;
+
+  emit({
+    type: "thinking",
+    gameId,
+    round,
+    timestamp: new Date().toISOString(),
+    data: { playerId: enchantress.id, playerName: enchantress.agentName },
+  });
+  await delay(TIMING.BEFORE_SPEAK);
+
+  const result = await runAgentTurn({
+    gameId,
+    player: enchantress,
+    allPlayers,
+    phase: "night_enchant",
+    round,
+    actionType: "enchant_target",
+  });
+
+  if (result.targetId) {
+    const target = allPlayers.find((p) => p.id === result.targetId);
+    // Cannot enchant fellow wolves
+    const targetRole = target?.role as Role | undefined;
+    if (targetRole && isWerewolfTeam(targetRole)) {
+      log.warn(`Enchantress tried to enchant wolf-team player. Skipping.`);
+      return null;
+    }
+    await db.insert(actions).values({
+      gameId,
+      round,
+      playerId: enchantress.id,
+      actionType: "enchant_target",
+      targetId: result.targetId,
+      result: "enchanted",
+    });
+    emit({
+      type: "enchant_action",
+      gameId,
+      round,
+      timestamp: new Date().toISOString(),
+      data: {
+        enchantressId: enchantress.id,
+        targetId: result.targetId,
+        targetName: target?.agentName,
+      },
+    });
+    await triggerGameHook({
+      type: "enchant_action",
+      gameId,
+      round,
+      data: { enchantressId: enchantress.id, targetId: result.targetId },
+    });
+    return result.targetId;
+  }
+  return null;
+}
+
+// ─── Dream Weaver Night Phase ────────────────────────────────────
+
+async function getLastDreamweaverPairKey(
+  gameId: string,
+  dreamweaverId: string
+): Promise<string | null> {
+  const rows = await db
+    .select()
+    .from(actions)
+    .where(
+      and(
+        eq(actions.gameId, gameId),
+        eq(actions.playerId, dreamweaverId),
+        eq(actions.actionType, "dreamweaver_check")
+      )
+    )
+    .orderBy(desc(actions.createdAt))
+    .limit(1);
+  return rows.length > 0 ? rows[0].result : null;
+}
+
+async function runDreamweaverNight(
+  gameId: string,
+  round: number,
+  allPlayers: Player[],
+  enchantTarget: string | null
+): Promise<void> {
+  await updatePhase(gameId, "night_dreamweaver");
+  const dw = allPlayers.find((p) => p.isAlive && p.role === "dreamweaver");
+  if (!dw) return;
+
+  // If enchanted, ability is nullified
+  if (enchantTarget === dw.id) {
+    log.info(`Dream Weaver ${dw.agentName} is enchanted — ability nullified.`);
+    return;
+  }
+
+  const lastPairKey = await getLastDreamweaverPairKey(gameId, dw.id);
+
+  emit({
+    type: "thinking",
+    gameId,
+    round,
+    timestamp: new Date().toISOString(),
+    data: { playerId: dw.id, playerName: dw.agentName },
+  });
+  await delay(TIMING.BEFORE_SPEAK);
+
+  const result = await runAgentTurn({
+    gameId,
+    player: dw,
+    allPlayers,
+    phase: "night_dreamweaver",
+    round,
+    actionType: "dreamweaver_check",
+    extraContext: { lastDreamweaverPairKey: lastPairKey },
+  });
+
+  if (result.targetId && result.secondTargetId && result.targetId !== result.secondTargetId) {
+    // Build a canonical pair key (sorted IDs)
+    const pairKey = [result.targetId, result.secondTargetId].sort().join(":");
+
+    // Prevent checking same pair consecutively
+    if (pairKey === lastPairKey) {
+      log.warn(`Dream Weaver tried to check same pair consecutively. Skipping.`);
+      return;
+    }
+
+    const t1 = allPlayers.find((p) => p.id === result.targetId);
+    const t2 = allPlayers.find((p) => p.id === result.secondTargetId);
+    const t1Role = t1?.role as Role | undefined;
+    const t2Role = t2?.role as Role | undefined;
+    const t1Team = t1Role ? ROLE_CONFIGS[t1Role].team : null;
+    const t2Team = t2Role ? ROLE_CONFIGS[t2Role].team : null;
+    const sameTeam = t1Team !== null && t2Team !== null && t1Team === t2Team;
+
+    await db.insert(actions).values({
+      gameId,
+      round,
+      playerId: dw.id,
+      actionType: "dreamweaver_check",
+      targetId: result.targetId,
+      result: pairKey, // store pair key for consecutive-check prevention
+    });
+    emit({
+      type: "dreamweaver_result",
+      gameId,
+      round,
+      timestamp: new Date().toISOString(),
+      data: {
+        dreamweaverId: dw.id,
+        target1Id: result.targetId,
+        target1Name: t1?.agentName,
+        target2Id: result.secondTargetId,
+        target2Name: t2?.agentName,
+        result: sameTeam ? "same_team" : "different_team",
+      },
+    });
+    await triggerGameHook({
+      type: "dreamweaver_check",
+      gameId,
+      round,
+      data: {
+        dreamweaverId: dw.id,
+        target1Id: result.targetId,
+        target2Id: result.secondTargetId,
+        result: sameTeam ? "same_team" : "different_team",
+      },
+    });
+  }
+}
+
+// ─── Night Resolution ───────────────────────────────────────────────
 
 /** @internal Exported for testing */
 export function resolveNightActions(
@@ -501,7 +710,8 @@ export function resolveNightActions(
   witchSaved: boolean,
   witchPoisonTarget: string | null,
   allPlayers: Player[],
-  elderExtraLifeUsed: boolean
+  elderExtraLifeUsed: boolean,
+  enchantTarget: string | null = null
 ): {
   deaths: { playerId: string; cause: DeathCause }[];
   elderUsedThisRound: boolean;
@@ -509,9 +719,14 @@ export function resolveNightActions(
   const deaths: { playerId: string; cause: DeathCause }[] = [];
   let elderUsed = false;
 
+  // If guard is enchanted, their protection is nullified
+  const effectiveGuardTarget = (enchantTarget && guardTarget && enchantTarget === guardTarget)
+    ? null
+    : guardTarget;
+
   if (wolfTarget) {
     let killed = true;
-    if (guardTarget === wolfTarget) killed = false;
+    if (effectiveGuardTarget === wolfTarget) killed = false;
     if (witchSaved) killed = false;
 
     if (killed) {
@@ -869,6 +1084,7 @@ export async function runGameLoop(gameId: string) {
     let guardTarget: string | null = null;
     let witchSaved = false;
     let witchPoisonTarget: string | null = null;
+    let enchantTarget: string | null = null;
 
     for (const phase of mode.nightPhaseOrder) {
       const nightPlayers = roundPlayers;
@@ -899,9 +1115,27 @@ export async function runGameLoop(gameId: string) {
             witchPoisonTarget = wr.poisonTarget;
           }
           break;
+        case "night_enchant":
+          enchantTarget = await runEnchantNight(gameId, round, nightPlayers);
+          break;
         case "night_seer":
           if (!abilitiesStripped) {
+            // If seer is enchanted, run the phase but result is randomized
+            if (enchantTarget) {
+              const seer = nightPlayers.find((p) => p.isAlive && p.role === "seer");
+              if (seer && enchantTarget === seer.id) {
+                log.info(`Seer ${seer.agentName} is enchanted — check result randomized.`);
+                // Still run agent turn so seer "thinks" they acted, but we don't record a real result
+                await runSeerNight(gameId, round, nightPlayers, true);
+                break;
+              }
+            }
             await runSeerNight(gameId, round, nightPlayers);
+          }
+          break;
+        case "night_dreamweaver":
+          if (!abilitiesStripped) {
+            await runDreamweaverNight(gameId, round, nightPlayers, enchantTarget);
           }
           break;
       }
@@ -921,7 +1155,8 @@ export async function runGameLoop(gameId: string) {
       witchSaved,
       witchPoisonTarget,
       preResolvePlayers,
-      elderExtraLifeUsed
+      elderExtraLifeUsed,
+      enchantTarget
     );
     // Persist elder extra life usage so it survives hot-reload/crash recovery
     if (elderUsedThisRound && wolfTarget) {
@@ -1011,7 +1246,12 @@ export async function runGameLoop(gameId: string) {
       return offsetA - offsetB;
     });
 
+    // Track if knight uses ability this round (game breaks out of speech loop)
+    let knightFlippedThisRound = false;
+
     for (const player of sortedSpeakers) {
+      if (knightFlippedThisRound) break;
+
       // Judge introduces speaker
       const introMsg = await narrateSpeakerIntro(player.agentName, player.seatNumber);
       await addSystemMessage(gameId, round, "day_discuss", introMsg);
@@ -1025,15 +1265,100 @@ export async function runGameLoop(gameId: string) {
       });
       await delay(TIMING.BEFORE_SPEAK);
 
+      // Knight can choose to flip a card instead of speaking
+      const isKnightWithAbility = player.role === "knight"
+        && !abilitiesStripped
+        && !(await hasKnightUsedCheck(gameId));
+
       const result = await runAgentTurn({
         gameId,
         player,
         allPlayers: postNightPlayers,
         phase: "day_discuss",
         round,
-        actionType: "speak",
+        actionType: isKnightWithAbility ? "knight_speak" : "speak",
       });
-      if (result.message) {
+
+      // Handle knight card flip
+      if (isKnightWithAbility && result.knightCheck && result.targetId) {
+        const target = postNightPlayers.find((p) => p.id === result.targetId);
+        const targetRole = target?.role as Role | undefined;
+        const targetIsWolf = targetRole ? isWerewolfTeam(targetRole) && targetRole !== "madman" : false;
+
+        await db.insert(actions).values({
+          gameId,
+          round,
+          playerId: player.id,
+          actionType: "knight_check",
+          targetId: result.targetId,
+          result: targetIsWolf ? "wolf_found" : "not_wolf",
+        });
+
+        if (targetIsWolf) {
+          // Knight succeeds: target wolf dies
+          await killPlayer(gameId, result.targetId, round);
+          await addSystemMessage(
+            gameId,
+            round,
+            "day_discuss",
+            `⚔️ 骑士 ${player.agentName} 亮出身份翻验 ${target?.agentName}，是狼人！${target?.agentName} 被立即淘汰！`
+          );
+          emit({
+            type: "knight_check",
+            gameId,
+            round,
+            timestamp: new Date().toISOString(),
+            data: {
+              knightId: player.id,
+              knightName: player.agentName,
+              targetId: result.targetId,
+              targetName: target?.agentName,
+              result: "wolf_found",
+            },
+          });
+          await delay(TIMING.DEATH_ANNOUNCEMENT);
+
+          // Trigger death effects on the eliminated wolf
+          if (target) {
+            await handleDeathTrigger(gameId, round, target, "knight_check", abilitiesStripped);
+          }
+          await handleCoupleHeartbreak(gameId, round, result.targetId, abilitiesStripped);
+        } else {
+          // Knight fails: knight dies
+          await killPlayer(gameId, player.id, round);
+          await addSystemMessage(
+            gameId,
+            round,
+            "day_discuss",
+            `⚔️ 骑士 ${player.agentName} 亮出身份翻验 ${target?.agentName}，不是狼人！骑士付出了生命的代价！`
+          );
+          emit({
+            type: "knight_check",
+            gameId,
+            round,
+            timestamp: new Date().toISOString(),
+            data: {
+              knightId: player.id,
+              knightName: player.agentName,
+              targetId: result.targetId,
+              targetName: target?.agentName,
+              result: "not_wolf",
+            },
+          });
+          await delay(TIMING.DEATH_ANNOUNCEMENT);
+          await handleCoupleHeartbreak(gameId, round, player.id, abilitiesStripped);
+        }
+
+        knightFlippedThisRound = true;
+
+        // Check win after knight flip
+        const postKnightPlayers = await getAllPlayers(gameId);
+        const knightWin = checkWinCondition(postKnightPlayers);
+        if (knightWin.finished) {
+          await endGame(gameId, knightWin.winner, knightWin.reason, round);
+          return;
+        }
+      } else if (result.message) {
         await db.insert(messages).values({ gameId, round, phase: "day_discuss", playerId: player.id, content: result.message });
         emit({
           type: "message",
@@ -1087,7 +1412,14 @@ export async function runGameLoop(gameId: string) {
     await updatePhase(gameId, "day_vote");
     const dayVotes: { voterId: string; targetId: string }[] = [];
 
-    for (const player of aliveDayPlayers) {
+    // Revealed idiot loses voting rights
+    const idiotRevealed = await hasIdiotRevealed(gameId);
+    const idiotPlayer = aliveDayPlayers.find((p) => p.role === "idiot");
+    const votingPlayers = idiotRevealed && idiotPlayer
+      ? aliveDayPlayers.filter((p) => p.id !== idiotPlayer.id)
+      : aliveDayPlayers;
+
+    for (const player of votingPlayers) {
       const result = await runAgentTurn({
         gameId,
         player,
@@ -1144,64 +1476,92 @@ export async function runGameLoop(gameId: string) {
       votes: voters.length,
     }));
     if (eliminated) {
-      await killPlayer(gameId, eliminated, round);
       const victim = postNightPlayers.find((p) => p.id === eliminated);
       const victimRole = victim?.role as Role | undefined;
-      const voteNarration = await narrateVoteResult(
-        { name: victim?.agentName ?? "?", roleZh: ROLE_CONFIGS[victimRole ?? "villager"].nameZh },
-        voteTally
-      );
-      await addSystemMessage(gameId, round, "day_vote", voteNarration);
-      await delay(TIMING.DEATH_ANNOUNCEMENT);
 
-      // Elder voted out → strip abilities
-      if (victimRole === "elder") {
-        abilitiesStripped = true;
-        await addSystemMessage(gameId, round, "day_vote", "⚠️ 长老被投票淘汰！作为惩罚，所有好人阵营失去特殊技能。");
-      }
-
-      // Death triggers
-      if (victim) {
-        await handleDeathTrigger(gameId, round, victim, "vote", abilitiesStripped);
-      }
-
-      // Couple heartbreak
-      await handleCoupleHeartbreak(gameId, round, eliminated, abilitiesStripped);
-
-      // Last words
-      if (victim) {
-        const lwIntro = await narrateLastWordsIntro(victim.agentName);
-        await addSystemMessage(gameId, round, "day_vote", lwIntro);
-
+      // Idiot first-time vote immunity: reveal identity, survive, lose vote rights
+      if (victimRole === "idiot" && !(await hasIdiotRevealed(gameId))) {
+        await db.insert(actions).values({
+          gameId,
+          round,
+          playerId: eliminated,
+          actionType: "idiot_reveal",
+          targetId: eliminated,
+          result: "revealed",
+        });
+        await addSystemMessage(
+          gameId,
+          round,
+          "day_vote",
+          `🃏 ${victim?.agentName} 被投票淘汰，但翻牌亮出【白痴】身份，免于一死！从此失去投票权。`
+        );
         emit({
-          type: "thinking",
+          type: "idiot_reveal",
           gameId,
           round,
           timestamp: new Date().toISOString(),
-          data: { playerId: victim.id, playerName: victim.agentName },
+          data: { playerId: eliminated, playerName: victim?.agentName },
         });
-        await delay(TIMING.BEFORE_SPEAK);
+        await delay(TIMING.DEATH_ANNOUNCEMENT);
+      } else {
+        // Normal elimination
+        await killPlayer(gameId, eliminated, round);
+        const voteNarration = await narrateVoteResult(
+          { name: victim?.agentName ?? "?", roleZh: ROLE_CONFIGS[victimRole ?? "villager"].nameZh },
+          voteTally
+        );
+        await addSystemMessage(gameId, round, "day_vote", voteNarration);
+        await delay(TIMING.DEATH_ANNOUNCEMENT);
 
-        const lw = await runAgentTurn({
-          gameId,
-          player: victim,
-          allPlayers: postNightPlayers,
-          phase: "day_vote",
-          round,
-          actionType: "last_words",
-        });
-        if (lw.message) {
-          await db.insert(messages).values({ gameId, round, phase: "day_vote", playerId: victim.id, content: lw.message });
+        // Elder voted out → strip abilities
+        if (victimRole === "elder") {
+          abilitiesStripped = true;
+          await addSystemMessage(gameId, round, "day_vote", "⚠️ 长老被投票淘汰！作为惩罚，所有好人阵营失去特殊技能。");
+        }
+
+        // Death triggers
+        if (victim) {
+          await handleDeathTrigger(gameId, round, victim, "vote", abilitiesStripped);
+        }
+
+        // Couple heartbreak
+        await handleCoupleHeartbreak(gameId, round, eliminated, abilitiesStripped);
+
+        // Last words
+        if (victim) {
+          const lwIntro = await narrateLastWordsIntro(victim.agentName);
+          await addSystemMessage(gameId, round, "day_vote", lwIntro);
+
           emit({
-            type: "last_words",
+            type: "thinking",
             gameId,
             round,
             timestamp: new Date().toISOString(),
-            data: { playerId: victim.id, playerName: victim.agentName, content: lw.message },
+            data: { playerId: victim.id, playerName: victim.agentName },
           });
-          await delay(TIMING.LAST_WORDS);
+          await delay(TIMING.BEFORE_SPEAK);
+
+          const lw = await runAgentTurn({
+            gameId,
+            player: victim,
+            allPlayers: postNightPlayers,
+            phase: "day_vote",
+            round,
+            actionType: "last_words",
+          });
+          if (lw.message) {
+            await db.insert(messages).values({ gameId, round, phase: "day_vote", playerId: victim.id, content: lw.message });
+            emit({
+              type: "last_words",
+              gameId,
+              round,
+              timestamp: new Date().toISOString(),
+              data: { playerId: victim.id, playerName: victim.agentName, content: lw.message },
+            });
+            await delay(TIMING.LAST_WORDS);
+          }
         }
-      }
+      } // end normal elimination
     } else {
       const tieNarration = await narrateVoteResult(null, voteTally);
       await addSystemMessage(gameId, round, "day_vote", tieNarration);

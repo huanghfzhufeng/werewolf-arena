@@ -26,11 +26,13 @@ export type AgentTurnParams = {
 export type AgentTurnResult = {
   message?: string;
   targetId?: string;
-  /** Second target for cupid_link */
+  /** Second target for cupid_link / dreamweaver_check */
   secondTargetId?: string;
   reason?: string;
   /** Witch-specific: "save" | "poison" | "none" */
   witchAction?: string;
+  /** Knight-specific: true if knight chose to flip a card this turn */
+  knightCheck?: boolean;
 };
 
 /**
@@ -300,6 +302,44 @@ export async function runAgentTurn(
       const lover2Name = l2Match?.[1]?.trim() ?? "";
       const targetId = resolvePlayerTarget(lover1Name, allPlayers);
       const secondTargetId = resolvePlayerTarget(lover2Name, allPlayers, targetId);
+      return { targetId, secondTargetId };
+    }
+
+    case "knight_speak": {
+      // Parse "SPEECH: ...\nFLIP: yes|no\nTARGET: ..." format
+      const speechMatch = response.match(/SPEECH:\s*(.+)/i);
+      const flipMatch = response.match(/FLIP:\s*(yes|no)/i);
+      const knightTargetMatch = response.match(/TARGET:\s*(.+)/i);
+      const wantsFlip = flipMatch?.[1]?.toLowerCase() === "yes";
+
+      if (wantsFlip && knightTargetMatch) {
+        const targetId = resolvePlayerTarget(
+          knightTargetMatch[1].trim(),
+          allPlayers,
+          player.id
+        );
+        return {
+          message: speechMatch?.[1]?.trim(),
+          knightCheck: true,
+          targetId,
+        };
+      }
+      return { message: speechMatch?.[1]?.trim() ?? response };
+    }
+
+    case "enchant_target": {
+      const targetId = resolvePlayerTarget(response, allPlayers, player.id);
+      return { targetId };
+    }
+
+    case "dreamweaver_check": {
+      // Parse "PLAYER1: xxx\nPLAYER2: yyy" format
+      const p1Match = response.match(/PLAYER1:\s*(.+)/i);
+      const p2Match = response.match(/PLAYER2:\s*(.+)/i);
+      const p1Name = p1Match?.[1]?.trim() ?? "";
+      const p2Name = p2Match?.[1]?.trim() ?? "";
+      const targetId = resolvePlayerTarget(p1Name, allPlayers, player.id);
+      const secondTargetId = resolvePlayerTarget(p2Name, allPlayers, targetId);
       return { targetId, secondTargetId };
     }
 

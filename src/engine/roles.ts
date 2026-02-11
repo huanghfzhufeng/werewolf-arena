@@ -5,18 +5,22 @@ export type Role =
   | "werewolf"
   | "wolf_king"
   | "white_wolf"
+  | "enchantress"
   | "seer"
   | "witch"
   | "guard"
   | "hunter"
   | "elder"
   | "cupid"
+  | "knight"
+  | "idiot"
+  | "dreamweaver"
   | "madman"
   | "villager";
 
 export type Team = "werewolf" | "villager";
 
-export type DeathTrigger = "hunter_shoot" | "wolf_king_revenge" | "white_wolf_explode" | null;
+export type DeathTrigger = "hunter_shoot" | "wolf_king_revenge" | "white_wolf_explode" | "idiot_reveal" | null;
 
 export type RoleConfig = {
   name: string;
