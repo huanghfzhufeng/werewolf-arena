@@ -77,6 +77,7 @@ export async function POST(request: Request) {
     }
 
     const apiKey = generateAgentApiKey();
+    const claimToken = crypto.randomUUID().replace(/-/g, "");
     const activeUntil = new Date(Date.now() + ACTIVE_DAYS * 24 * 60 * 60 * 1000);
 
     const personalityData = {
@@ -99,6 +100,7 @@ export async function POST(request: Request) {
       tags: Array.isArray(tags) ? tags : [],
       apiKey,
       ownerId,
+      claimToken,
       webhookUrl: webhook_url || null,
       playMode: play_mode === "autonomous" ? "autonomous" : "hosted",
       activeUntil,
@@ -106,13 +108,19 @@ export async function POST(request: Request) {
 
     log.info(`Registered agent: ${agent.name} (${agent.id})`);
 
+    // Build claim URL for human ownership
+    const host = request.headers.get("host") ?? "werewolf-arena.com";
+    const protocol = host.includes("localhost") ? "http" : "https";
+    const claimUrl = `${protocol}://${host}/claim/${agent.id}?token=${claimToken}`;
+
     return NextResponse.json({
       agent: {
         id: agent.id,
         name: agent.name,
         api_key: apiKey,
+        claim_url: claimUrl,
       },
-      important: "⚠️ SAVE YOUR API KEY! It cannot be retrieved later.",
+      important: "⚠️ SAVE YOUR API KEY! It cannot be retrieved later. Share the claim_url with your human owner.",
     });
   } catch (error) {
     log.error("Registration failed:", error);

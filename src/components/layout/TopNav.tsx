@@ -1,7 +1,9 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Trophy, History, Plus, Users, Wifi, WifiOff } from "lucide-react";
+import { useSession, signOut } from "next-auth/react";
+import { useState, useRef, useEffect } from "react";
+import { Home, Trophy, History, Plus, Users, LogIn, LayoutDashboard, LogOut, ChevronDown } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "首页", icon: Home },
@@ -11,7 +13,78 @@ const NAV_ITEMS = [
   { href: "/join", label: "接入", icon: Plus },
 ];
 
-export function TopNav({ connected }: { connected?: boolean }) {
+function UserMenu() {
+  const { data: session } = useSession();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  if (!session?.user) {
+    return (
+      <Link
+        href="/login"
+        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg text-text-muted hover:text-text-secondary hover:bg-surface/50 transition-colors"
+      >
+        <LogIn size={15} />
+        <span className="hidden sm:inline">Login</span>
+      </Link>
+    );
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-surface/50 transition-colors"
+      >
+        {session.user.image ? (
+          <img
+            src={session.user.image}
+            alt=""
+            className="w-6 h-6 rounded-full"
+          />
+        ) : (
+          <span className="w-6 h-6 rounded-full bg-surface-hover flex items-center justify-center text-xs">
+            {session.user.name?.[0] ?? "👤"}
+          </span>
+        )}
+        <ChevronDown size={12} className="text-text-muted" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1 w-44 card p-1 shadow-lg z-50">
+          <div className="px-3 py-2 text-xs text-text-muted border-b border-border mb-1 truncate">
+            {session.user.name ?? session.user.email}
+          </div>
+          <Link
+            href="/dashboard"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-surface-hover transition-colors"
+          >
+            <LayoutDashboard size={14} />
+            Dashboard
+          </Link>
+          <button
+            onClick={() => signOut({ callbackUrl: "/" })}
+            className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-surface-hover transition-colors w-full text-left"
+          >
+            <LogOut size={14} />
+            Logout
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TopNav() {
   const pathname = usePathname();
 
   return (
@@ -21,7 +94,7 @@ export function TopNav({ connected }: { connected?: boolean }) {
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <span className="text-xl">🐺</span>
           <span className="text-lg font-[family-name:var(--font-brand)] font-bold hidden sm:inline">
-            狼人杀 Arena
+            Werewolf Arena
           </span>
         </Link>
 
@@ -48,21 +121,8 @@ export function TopNav({ connected }: { connected?: boolean }) {
           })}
         </nav>
 
-        {/* Status indicator */}
-        <div className="flex items-center gap-2 text-xs text-text-muted shrink-0">
-          {connected !== undefined && (
-            <>
-              {connected ? (
-                <Wifi size={13} className="text-arena-green" />
-              ) : (
-                <WifiOff size={13} className="text-wolf" />
-              )}
-              <span className="hidden sm:inline">
-                {connected ? "实时" : "离线"}
-              </span>
-            </>
-          )}
-        </div>
+        {/* User menu */}
+        <UserMenu />
       </div>
     </header>
   );

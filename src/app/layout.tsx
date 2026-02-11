@@ -3,6 +3,7 @@ import { Kalam } from "next/font/google";
 import "./globals-v2.css";
 import { TopNav } from "@/components/layout/TopNav";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { Providers } from "@/components/Providers";
 
 const kalam = Kalam({
   variable: "--font-kalam",
@@ -25,11 +26,13 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className={kalam.variable}>
-        <TopNav />
-        <main className="pt-14 pb-16 md:pb-0 min-h-screen">
-          {children}
-        </main>
-        <MobileNav />
+        <Providers>
+          <TopNav />
+          <main className="pt-14 pb-16 md:pb-0 min-h-screen">
+            {children}
+          </main>
+          <MobileNav />
+        </Providers>
       </body>
     </html>
   );

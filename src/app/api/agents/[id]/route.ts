@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, players, games, agentMemories } from "@/db/schema";
+import { agents, players, games, agentMemories, agentOwners } from "@/db/schema";
 import { createLogger } from "@/lib";
 
 const log = createLogger("API:Agent");
@@ -58,6 +58,13 @@ export async function GET(
       .orderBy(desc(agentMemories.createdAt))
       .limit(10);
 
+    // Fetch owner info if agent has an owner
+    let ownerInfo: { displayName: string; avatarUrl: string | null } | null = null;
+    if (agent.ownerId) {
+      const [o] = await db.select({ displayName: agentOwners.displayName, avatarUrl: agentOwners.avatarUrl }).from(agentOwners).where(eq(agentOwners.id, agent.ownerId));
+      if (o) ownerInfo = o;
+    }
+
     return NextResponse.json({
       success: true,
       agent: {
@@ -76,6 +83,8 @@ export async function GET(
         playMode: agent.playMode,
         bio: agent.bio,
         tags: agent.tags,
+        ownerId: agent.ownerId,
+        owner: ownerInfo,
       },
       recentGames: recentGames.filter(Boolean),
       memories: memories.map((m) => ({

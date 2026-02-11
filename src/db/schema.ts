@@ -98,6 +98,8 @@ export const agentOwners = pgTable("agent_owners", {
   email: text("email").unique(),
   apiKey: text("api_key").notNull().unique(),
   maxAgents: integer("max_agents").notNull().default(5),
+  githubId: text("github_id").unique(),
+  avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -129,6 +131,7 @@ export const agents = pgTable("agents", {
   webhookUrl: text("webhook_url"),
   activeUntil: timestamp("active_until"),
   playMode: playModeEnum("play_mode").notNull().default("hosted"),
+  claimToken: text("claim_token").unique(),
 });
 
 export const lobbies = pgTable("lobbies", {

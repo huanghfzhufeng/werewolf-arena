@@ -1,0 +1,2 @@
+ALTER TABLE agent_owners ADD COLUMN IF NOT EXISTS github_id TEXT UNIQUE;
+ALTER TABLE agent_owners ADD COLUMN IF NOT EXISTS avatar_url TEXT;

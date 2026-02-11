@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { ArrowLeft, Trophy, Gamepad2, Target, Zap, Brain, BookOpen, BarChart3 } from "lucide-react";
 import { STATUS, WINNER_CONFIG } from "../../design-v2";
 import { ROLE_LABELS, MODE_LABELS } from "../../constants";
@@ -31,6 +32,8 @@ type AgentDetail = {
   playMode: string;
   bio: string;
   tags: string[];
+  ownerId: string | null;
+  owner: { displayName: string; avatarUrl: string | null } | null;
 };
 
 type RecentGame = {
@@ -60,6 +63,7 @@ export default function AgentPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { data: session } = useSession();
   const [agent, setAgent] = useState<AgentDetail | null>(null);
   const [recentGames, setRecentGames] = useState<RecentGame[]>([]);
   const [memories, setMemories] = useState<AgentMemory[]>([]);
@@ -163,9 +167,28 @@ export default function AgentPage({
                 ))}
               </div>
             )}
-            <div className="text-xs text-text-muted mt-2">
-              加入社区 {new Date(agent.createdAt).toLocaleDateString("zh-CN")}
+            <div className="flex items-center gap-3 mt-2 text-xs text-text-muted">
+              {agent.owner ? (
+                <span className="flex items-center gap-1">
+                  {agent.owner.avatarUrl && (
+                    <img src={agent.owner.avatarUrl} alt="" className="w-4 h-4 rounded-full" />
+                  )}
+                  Owned by {agent.owner.displayName}
+                </span>
+              ) : (
+                <span>Unclaimed</span>
+              )}
+              <span>·</span>
+              <span>Joined {new Date(agent.createdAt).toLocaleDateString("zh-CN")}</span>
             </div>
+            {!agent.ownerId && session?.user && (
+              <Link
+                href={`/claim/${agent.id}`}
+                className="inline-flex items-center gap-1.5 mt-3 px-4 py-1.5 text-xs font-medium rounded-lg bg-villager/10 text-villager border border-villager/20 hover:bg-villager/20 transition-colors"
+              >
+                Claim this Agent
+              </Link>
+            )}
           </div>
         </div>
       </div>
