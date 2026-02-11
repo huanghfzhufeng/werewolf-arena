@@ -5,8 +5,9 @@ import type { Player } from "@/db/schema";
 import { ROLE_CONFIGS } from "@/engine/roles";
 import type { Role } from "@/engine/roles";
 import { updateAgentPostGame } from "./agent-lifecycle";
-import { writeGameReflection, writeGameTranscript, writeOpponentImpressions, pruneMemories } from "@/memory";
+import { writeAgentMemories, writeGameTranscript, createPost, pruneMemories } from "@/memory";
 import { emitCommunity } from "./community-events";
+import { tryGenerateReplies } from "./reply-generator";
 import { MODE_LABELS } from "@/app/constants";
 import { createLogger } from "@/lib";
 
@@ -78,18 +79,76 @@ export async function onGameEnd(
 
     await updateAgentPostGame(player.agentId, gameId, won, opponentAvgElo);
 
-    // Write memories (non-blocking — fire and forget)
+    // Write memories — agent self-writes (OpenClaw-aligned)
     writeGameTranscript(player.agentId, gameId, player, keyEvents, winner).catch(
       (e) => log.error(`Failed to write transcript for ${player.agentName}:`, e)
     );
-    writeGameReflection(player.agentId, gameId, player, allPlayers, winner, keyEvents).then(
-      () => pruneMemories(player.agentId!)
-    ).catch(
-      (e) => log.error(`Failed to write reflection for ${player.agentName}:`, e)
-    );
-    writeOpponentImpressions(player.agentId, gameId, player, allPlayers, winner, keyEvents).catch(
-      (e) => log.error(`Failed to write opponent impressions for ${player.agentName}:`, e)
-    );
+
+    // Agent decides what to remember + creates social posts
+    writeAgentMemories(player.agentId, gameId, player, allPlayers, winner, keyEvents)
+      .then(async (notes) => {
+        await pruneMemories(player.agentId!);
+
+        // Create social posts from agent's notes
+        const selfNotes = notes.filter((n) => n.source === "self-note");
+        const socialNotes = notes.filter((n) => n.source === "social");
+
+        // Post top self-note as a reflection
+        if (selfNotes.length > 0) {
+          const postId = await createPost({
+            agentId: player.agentId!,
+            type: "reflection",
+            content: selfNotes[0].content,
+            gameId,
+          });
+          emitCommunity({
+            type: "agent_reflection",
+            data: {
+              postId,
+              agentName: player.agentName,
+              avatar: (player.personality as { avatar?: string })?.avatar ?? "\uD83C\uDFAD",
+              content: selfNotes[0].content,
+              gameId,
+            },
+          });
+        }
+
+        // Post social impressions
+        for (const note of socialNotes) {
+          // Try to find target agent from note content
+          const targetPlayer = allPlayers.find(
+            (p) => p.id !== player.id && note.content.includes(p.agentName)
+          );
+          const postId = await createPost({
+            agentId: player.agentId!,
+            type: "impression",
+            content: note.content,
+            gameId,
+            targetAgentId: targetPlayer?.agentId ?? null,
+          });
+          if (targetPlayer) {
+            emitCommunity({
+              type: "agent_impression",
+              data: {
+                postId,
+                fromAgent: player.agentName,
+                fromAvatar: (player.personality as { avatar?: string })?.avatar ?? "\uD83C\uDFAD",
+                toAgent: targetPlayer.agentName,
+                toAvatar: (targetPlayer.personality as { avatar?: string })?.avatar ?? "\uD83C\uDFAD",
+                content: note.content,
+                gameId,
+              },
+            });
+            // Trigger reply from target agent
+            if (targetPlayer.agentId) {
+              tryGenerateReplies(postId, targetPlayer.agentId, player.agentName, note.content, gameId).catch(
+                (e) => log.error(`Reply generation failed:`, e)
+              );
+            }
+          }
+        }
+      })
+      .catch((e) => log.error(`Failed to write memories for ${player.agentName}:`, e));
   }
 
   // Emit game end summary to community feed

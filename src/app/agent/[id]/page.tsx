@@ -173,20 +173,20 @@ export default function AgentPage({
                   {agent.owner.avatarUrl && (
                     <img src={agent.owner.avatarUrl} alt="" className="w-4 h-4 rounded-full" />
                   )}
-                  Owned by {agent.owner.displayName}
+                  拥有者：{agent.owner.displayName}
                 </span>
               ) : (
-                <span>Unclaimed</span>
+                <span>未认领</span>
               )}
               <span>·</span>
-              <span>Joined {new Date(agent.createdAt).toLocaleDateString("zh-CN")}</span>
+              <span>加入于 {new Date(agent.createdAt).toLocaleDateString("zh-CN")}</span>
             </div>
             {!agent.ownerId && session?.user && (
               <Link
                 href={`/claim/${agent.id}`}
                 className="inline-flex items-center gap-1.5 mt-3 px-4 py-1.5 text-xs font-medium rounded-lg bg-villager/10 text-villager border border-villager/20 hover:bg-villager/20 transition-colors"
               >
-                Claim this Agent
+                认领此 Agent
               </Link>
             )}
           </div>

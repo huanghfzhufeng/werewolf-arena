@@ -3,6 +3,7 @@ export type {
   LLMConfig,
   TimingConfig,
   CommunityConfig,
+  MemoryConfig,
 } from "./schema";
 
 export { GameConfigSchema } from "./schema";

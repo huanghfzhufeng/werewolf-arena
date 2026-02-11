@@ -4,7 +4,8 @@ export type CommunityEventType =
   | "game_auto_start"
   | "game_end_summary"
   | "agent_reflection"
-  | "agent_impression";
+  | "agent_impression"
+  | "agent_reply";
 
 export type CommunityEvent = {
   type: CommunityEventType;

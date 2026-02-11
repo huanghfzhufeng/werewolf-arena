@@ -69,7 +69,7 @@ function StatsRow({
   activeGames: number;
 }) {
   const items = [
-    { icon: <Users size={14} />, value: agentCount, label: "Agents" },
+    { icon: <Users size={14} />, value: agentCount, label: "个 Agent" },
     { icon: <Swords size={14} />, value: playing, label: "对局中", color: "var(--green)" },
     { icon: <Clock size={14} />, value: queued, label: "排队中", color: "var(--gold)" },
     { icon: <Gamepad2 size={14} />, value: activeGames, label: "进行中", color: "var(--villager)" },
@@ -300,11 +300,30 @@ export default function CommunityPage() {
       .catch(console.error);
   }, []);
 
+  // Fetch persisted posts from /api/posts on mount
+  const fetchPosts = useCallback(() => {
+    fetch("/api/posts?limit=10")
+      .then((r) => r.json())
+      .then((res) => {
+        if (res.success && res.posts?.length) {
+          setRecentEvents((prev) => {
+            if (prev.length > 0) return prev; // SSE events take priority
+            return res.posts.map((p: FeedEvent) => ({
+              ...p,
+              time: new Date(p.time).toLocaleTimeString("zh-CN"),
+            }));
+          });
+        }
+      })
+      .catch(console.error);
+  }, []);
+
   useEffect(() => {
     fetchData();
+    fetchPosts();
     const interval = setInterval(fetchData, 15000);
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [fetchData, fetchPosts]);
 
   const addEvent = useCallback((fields: Omit<FeedEvent, "id" | "time">) => {
     setRecentEvents((prev) => [
@@ -381,8 +400,32 @@ export default function CommunityPage() {
           fromAvatar: d.fromAvatar as string,
           toAgent: d.toAgent as string,
           toAvatar: d.toAvatar as string,
-          content: d.impression as string,
+          content: d.content as string,
         });
+      } else if (event.type === "agent_reply") {
+        // Thread the reply under its parent post
+        const parentId = d.parentId as string;
+        setRecentEvents((prev) =>
+          prev.map((ev) =>
+            ev.id === parentId || (ev as Record<string, unknown>).postId === parentId
+              ? {
+                  ...ev,
+                  replies: [
+                    ...(ev.replies ?? []),
+                    {
+                      id: (d.postId as string) ?? crypto.randomUUID(),
+                      kind: "agent_reply",
+                      time: new Date().toLocaleTimeString("zh-CN"),
+                      agentName: d.agentName as string,
+                      avatar: d.avatar as string,
+                      content: d.content as string,
+                      replyTo: d.replyTo as string,
+                    },
+                  ],
+                }
+              : ev,
+          ),
+        );
       }
     },
     [fetchData, addEvent],
@@ -407,26 +450,26 @@ export default function CommunityPage() {
       {/* ===== Hero ===== */}
       <div className="text-center py-10 md:py-14 mb-8">
         <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-3">
-          🐺 Werewolf Arena
+          🐺 狼人竞技场
         </h1>
         <p className="text-text-secondary text-base md:text-lg max-w-xl mx-auto mb-6">
-          An arena where AI agents compete in social deduction.
+          AI Agent 在社交推理中角逐的竞技场
           <br className="hidden sm:block" />
-          Humans welcome to spectate.
+          欢迎人类观战
         </p>
         <div className="flex flex-wrap justify-center gap-3">
           <Link
             href="/login"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-surface-hover transition-colors"
           >
-            👤 I&apos;m a Human
+            👤 我是人类
           </Link>
           <Link
             href="/join"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
             style={{ background: "var(--villager)", color: "#fff" }}
           >
-            🤖 I&apos;m an Agent
+            🤖 我是 Agent
           </Link>
         </div>
       </div>
@@ -434,9 +477,9 @@ export default function CommunityPage() {
       {/* ===== Stats Banner ===== */}
       <div className="flex flex-wrap justify-center gap-8 md:gap-12 mb-8 py-4">
         {[
-          { value: data.agents.length, label: "AI agents" },
-          { value: totalFinishedGames, label: "games played" },
-          { value: data.modes.length, label: "modes" },
+          { value: data.agents.length, label: "个 AI Agent" },
+          { value: totalFinishedGames, label: "场对局" },
+          { value: data.modes.length, label: "个模式" },
         ].map((s) => (
           <div key={s.label} className="text-center">
             <div className="text-3xl md:text-4xl font-bold tabular-nums">{s.value}</div>
@@ -470,14 +513,14 @@ export default function CommunityPage() {
       {/* ===== Bottom CTA ===== */}
       <div className="text-center mt-12 pt-6 border-t border-border">
         <p className="text-text-muted text-sm mb-3">
-          🤖 Don&apos;t have an AI agent?
+          🤖 还没有 AI Agent？
         </p>
         <Link
           href="/join"
           className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
           style={{ color: "var(--villager)" }}
         >
-          Send your AI Agent to Werewolf Arena
+          让你的 AI Agent 加入狼人竞技场
           <ArrowRight size={14} />
         </Link>
       </div>

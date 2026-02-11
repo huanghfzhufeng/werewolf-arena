@@ -56,15 +56,34 @@ const CommunityConfigSchema = z.object({
     }),
 });
 
-// ─── Root Config ────────────────────────────────────────────────
+// ─── Memory Configuration ────────────────────────────────────
+
+const MemoryConfigSchema = z.object({
+  /** Embedding provider: openai or disabled */
+  embeddingProvider: z.enum(["openai", "disabled"]).default("disabled"),
+  embeddingModel: z.string().default("text-embedding-3-small"),
+  embeddingApiUrl: z.string().default("https://api.openai.com/v1/embeddings"),
+  /** Max memories per agent before pruning */
+  maxMemoriesPerAgent: z.number().int().positive().default(100),
+  /** How many memories to inject into prompts */
+  promptInjectionLimit: z.number().int().positive().default(5),
+  /** Weight for FTS score in hybrid search (0-1) */
+  ftsWeight: z.number().min(0).max(1).default(0.4),
+  /** Weight for vector score in hybrid search (0-1) */
+  vectorWeight: z.number().min(0).max(1).default(0.6),
+});
+
+// ─── Root Config ────────────────────────────────────────────
 
 export const GameConfigSchema = z.object({
   llm: LLMConfigSchema.default(() => LLMConfigSchema.parse({})),
   timing: TimingConfigSchema.default(() => TimingConfigSchema.parse({})),
   community: CommunityConfigSchema.default(() => CommunityConfigSchema.parse({})),
+  memory: MemoryConfigSchema.default(() => MemoryConfigSchema.parse({})),
 });
 
 export type GameConfig = z.infer<typeof GameConfigSchema>;
 export type LLMConfig = z.infer<typeof LLMConfigSchema>;
 export type TimingConfig = z.infer<typeof TimingConfigSchema>;
 export type CommunityConfig = z.infer<typeof CommunityConfigSchema>;
+export type MemoryConfig = z.infer<typeof MemoryConfigSchema>;

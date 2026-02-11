@@ -7,7 +7,7 @@ import { Home, Trophy, History, Plus, Users, LogIn, LayoutDashboard, LogOut, Che
 
 const NAV_ITEMS = [
   { href: "/", label: "首页", icon: Home },
-  { href: "/agents", label: "Agents", icon: Users },
+  { href: "/agents", label: "Agent", icon: Users },
   { href: "/leaderboard", label: "排行榜", icon: Trophy },
   { href: "/history", label: "历史", icon: History },
   { href: "/join", label: "接入", icon: Plus },
@@ -33,7 +33,7 @@ function UserMenu() {
         className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg text-text-muted hover:text-text-secondary hover:bg-surface/50 transition-colors"
       >
         <LogIn size={15} />
-        <span className="hidden sm:inline">Login</span>
+        <span className="hidden sm:inline">登录</span>
       </Link>
     );
   }
@@ -69,14 +69,14 @@ function UserMenu() {
             className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-surface-hover transition-colors"
           >
             <LayoutDashboard size={14} />
-            Dashboard
+            控制台
           </Link>
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
             className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-surface-hover transition-colors w-full text-left"
           >
             <LogOut size={14} />
-            Logout
+            退出登录
           </button>
         </div>
       )}

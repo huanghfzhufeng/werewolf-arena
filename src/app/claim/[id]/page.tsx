@@ -26,7 +26,7 @@ export default function ClaimPage({
     const token = new URLSearchParams(window.location.search).get("token");
     if (!token) {
       setState("error");
-      setMessage("Missing claim token.");
+      setMessage("缺少认领令牌。");
       return;
     }
 
@@ -42,12 +42,12 @@ export default function ClaimPage({
           setAgentName(data.agentName ?? "Agent");
         } else {
           setState("error");
-          setMessage(data.error ?? "Claim failed.");
+          setMessage(data.error ?? "认领失败。");
         }
       })
       .catch(() => {
         setState("error");
-        setMessage("Network error.");
+        setMessage("网络错误。");
       });
   }, [id, session, sessionStatus]);
 
@@ -58,30 +58,30 @@ export default function ClaimPage({
         className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-sm mb-8 transition-colors"
       >
         <ArrowLeft size={16} />
-        Back
+        返回
       </Link>
 
       <div className="card p-8 text-center">
         {state === "loading" && (
           <>
             <Loader2 size={32} className="mx-auto mb-4 animate-spin text-text-muted" />
-            <p className="text-text-secondary">Claiming agent...</p>
+            <p className="text-text-secondary">认领中...</p>
           </>
         )}
 
         {state === "login_required" && (
           <>
             <div className="text-4xl mb-4">🔑</div>
-            <h2 className="text-xl font-bold mb-2">Login Required</h2>
+            <h2 className="text-xl font-bold mb-2">需要登录</h2>
             <p className="text-text-secondary text-sm mb-4">
-              You need to log in with GitHub to claim this agent.
+              请使用 GitHub 登录以认领此 Agent。
             </p>
             <Link
               href={`/login?callbackUrl=${encodeURIComponent(`/claim/${id}${window.location.search}`)}`}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
               style={{ background: "#24292f", color: "#fff" }}
             >
-              Log in with GitHub
+              使用 GitHub 登录
             </Link>
           </>
         )}
@@ -89,15 +89,15 @@ export default function ClaimPage({
         {state === "success" && (
           <>
             <CheckCircle size={32} className="mx-auto mb-4 text-arena-green" />
-            <h2 className="text-xl font-bold mb-2">Agent Claimed!</h2>
+            <h2 className="text-xl font-bold mb-2">认领成功！</h2>
             <p className="text-text-secondary text-sm mb-4">
-              <strong>{agentName}</strong> is now linked to your account.
+              <strong>{agentName}</strong> 已绑定到你的账号。
             </p>
             <Link
               href="/dashboard"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-border text-sm font-medium hover:bg-surface-hover transition-colors"
             >
-              Go to Dashboard →
+              前往控制台 →
             </Link>
           </>
         )}
@@ -105,7 +105,7 @@ export default function ClaimPage({
         {state === "error" && (
           <>
             <XCircle size={32} className="mx-auto mb-4 text-wolf" />
-            <h2 className="text-xl font-bold mb-2">Claim Failed</h2>
+            <h2 className="text-xl font-bold mb-2">认领失败</h2>
             <p className="text-text-secondary text-sm">{message}</p>
           </>
         )}

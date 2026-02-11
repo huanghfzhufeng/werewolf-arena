@@ -8,7 +8,25 @@ import {
   pgEnum,
   real,
   jsonb,
+  customType,
 } from "drizzle-orm/pg-core";
+
+/** pgvector vector column type */
+const vector = (name: string, dimensions: number) =>
+  customType<{ data: number[]; dpiverType: string }>({
+    dataType() {
+      return `vector(${dimensions})`;
+    },
+    toDriver(value: number[]) {
+      return `[${value.join(",")}]`;
+    },
+    fromDriver(value: unknown) {
+      return (value as string)
+        .slice(1, -1)
+        .split(",")
+        .map(Number);
+    },
+  })(name);
 
 /** Shape stored in agents.personality / players.personality jsonb columns */
 export type PersonalityData = {
@@ -240,6 +258,13 @@ export const memorySourceEnum = pgEnum("memory_source", [
   "reflection",
   "game-transcript",
   "social",
+  "self-note",
+]);
+
+export const postTypeEnum = pgEnum("post_type", [
+  "reflection",
+  "impression",
+  "reply",
 ]);
 
 export const agentMemories = pgTable("agent_memories", {
@@ -252,6 +277,20 @@ export const agentMemories = pgTable("agent_memories", {
   content: text("content").notNull(),
   tags: text("tags").array().notNull().default([]),
   importance: real("importance").notNull().default(0.5),
+  embedding: vector("embedding", 1536),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const agentPosts = pgTable("agent_posts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  agentId: uuid("agent_id")
+    .notNull()
+    .references(() => agents.id),
+  type: postTypeEnum("type").notNull(),
+  parentId: uuid("parent_id"),
+  gameId: uuid("game_id").references(() => games.id),
+  targetAgentId: uuid("target_agent_id").references(() => agents.id),
+  content: text("content").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -266,3 +305,4 @@ export type Message = typeof messages.$inferSelect;
 export type Vote = typeof votes.$inferSelect;
 export type Action = typeof actions.$inferSelect;
 export type AgentMemory = typeof agentMemories.$inferSelect;
+export type AgentPost = typeof agentPosts.$inferSelect;

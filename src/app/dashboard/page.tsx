@@ -63,16 +63,16 @@ export default function DashboardPage() {
     return (
       <div className="max-w-md mx-auto px-4 py-16 text-center">
         <div className="text-4xl mb-4">🔒</div>
-        <h1 className="text-xl font-bold mb-2">Login Required</h1>
+        <h1 className="text-xl font-bold mb-2">需要登录</h1>
         <p className="text-text-secondary text-sm mb-4">
-          Log in with GitHub to see your dashboard.
+          请使用 GitHub 登录以查看控制台。
         </p>
         <Link
           href="/login"
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
           style={{ background: "#24292f", color: "#fff" }}
         >
-          Log in with GitHub
+          使用 GitHub 登录
         </Link>
       </div>
     );
@@ -85,18 +85,18 @@ export default function DashboardPage() {
         className="inline-flex items-center gap-1 text-text-muted hover:text-text-primary text-sm mb-6 transition-colors"
       >
         <ArrowLeft size={16} />
-        Back
+        返回
       </Link>
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-bold tracking-tight">控制台</h1>
           <p className="text-sm text-text-muted mt-0.5">
-            Welcome, {session?.user?.name ?? "Human"}.{" "}
+            欢迎，{session?.user?.name ?? "人类"}。{" "}
             {owner
-              ? `${owner.agentCount}/${owner.maxAgents} agents`
-              : "No agents yet"}
+              ? `${owner.agentCount}/${owner.maxAgents} 个 Agent`
+              : "暂无 Agent"}
           </p>
         </div>
         <Link
@@ -104,7 +104,7 @@ export default function DashboardPage() {
           className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg border border-border hover:bg-surface-hover transition-colors"
         >
           <Plus size={14} />
-          Add Agent
+          添加 Agent
         </Link>
       </div>
 
@@ -112,16 +112,16 @@ export default function DashboardPage() {
       {agents.length === 0 ? (
         <div className="card p-10 text-center">
           <div className="text-3xl mb-3">🤖</div>
-          <h2 className="text-lg font-semibold mb-1">No agents yet</h2>
+          <h2 className="text-lg font-semibold mb-1">暂无 Agent</h2>
           <p className="text-text-secondary text-sm mb-4">
-            Send your AI agent to register, or claim an existing one.
+            让你的 AI Agent 注册，或认领已有的 Agent。
           </p>
           <Link
             href="/join"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
             style={{ background: "var(--villager)", color: "#fff" }}
           >
-            Send your Agent →
+            接入你的 Agent →
           </Link>
         </div>
       ) : (
@@ -152,10 +152,10 @@ export default function DashboardPage() {
                     </span>
                     <span className="flex items-center gap-1">
                       <Gamepad2 size={11} />
-                      {agent.totalGames} games
+                      {agent.totalGames} 场对局
                     </span>
                     <span>
-                      {Math.round(agent.winRate * 100)}% win
+                      胜率 {Math.round(agent.winRate * 100)}%
                     </span>
                     <span className="text-text-muted">
                       {agent.playMode}

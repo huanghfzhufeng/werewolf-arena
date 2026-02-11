@@ -1,4 +1,4 @@
-export type MemorySource = "reflection" | "game-transcript" | "social";
+export type MemorySource = "reflection" | "game-transcript" | "social" | "self-note";
 
 export type MemoryEntry = {
   agentId: string;
@@ -7,6 +7,7 @@ export type MemoryEntry = {
   content: string;
   tags: string[];
   importance: number;
+  embedding?: number[] | null;
 };
 
 export type MemorySearchResult = {
@@ -15,4 +16,13 @@ export type MemorySearchResult = {
   source: MemorySource;
   importance: number;
   createdAt: Date;
+  score?: number;
+};
+
+/** Structured note returned by LLM when agent self-writes memory */
+export type AgentMemoryNote = {
+  content: string;
+  tags: string[];
+  importance: number;
+  source: MemorySource;
 };

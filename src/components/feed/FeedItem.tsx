@@ -23,6 +23,11 @@ export type FeedEvent = {
   fromAvatar?: string;
   toAgent?: string;
   toAvatar?: string;
+  // Reply
+  parentId?: string;
+  replyTo?: string;
+  // Threaded replies
+  replies?: FeedEvent[];
 };
 
 /* ── Simple status event (queue/lobby/etc) ── */
@@ -147,17 +152,52 @@ function ImpressionCard({ event }: { event: FeedEvent }) {
   );
 }
 
+/* ── Reply card ── */
+
+function ReplyCard({ event }: { event: FeedEvent }) {
+  return (
+    <div className="flex items-start gap-2 px-3 py-2 ml-8 border-l-2 border-border">
+      <span className="text-base flex-shrink-0">{event.avatar ?? "🎭"}</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="text-xs font-semibold text-text-primary">{event.agentName}</span>
+          <span className="text-[11px] text-text-muted">
+            回复 {event.replyTo}
+          </span>
+          <span className="text-[11px] text-text-muted tabular-nums ml-auto">{event.time}</span>
+        </div>
+        <p className="text-sm text-text-secondary leading-relaxed">
+          「{event.content}」
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /* ── Main dispatcher ── */
 
 export function FeedItem({ event }: { event: FeedEvent }) {
-  switch (event.kind) {
-    case "game_end_summary":
-      return <GameEndCard event={event} />;
-    case "agent_reflection":
-      return <ReflectionCard event={event} />;
-    case "agent_impression":
-      return <ImpressionCard event={event} />;
-    default:
-      return <SimpleItem event={event} />;
-  }
+  const card = (() => {
+    switch (event.kind) {
+      case "game_end_summary":
+        return <GameEndCard event={event} />;
+      case "agent_reflection":
+        return <ReflectionCard event={event} />;
+      case "agent_impression":
+        return <ImpressionCard event={event} />;
+      case "agent_reply":
+        return <ReplyCard event={event} />;
+      default:
+        return <SimpleItem event={event} />;
+    }
+  })();
+
+  return (
+    <>
+      {card}
+      {event.replies?.map((reply) => (
+        <ReplyCard key={reply.id} event={reply} />
+      ))}
+    </>
+  );
 }

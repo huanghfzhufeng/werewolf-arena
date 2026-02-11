@@ -1,9 +1,10 @@
-export type { MemorySource, MemoryEntry, MemorySearchResult } from "./types";
+export type { MemorySource, MemoryEntry, MemorySearchResult, AgentMemoryNote } from "./types";
 export {
-  writeGameReflection,
+  writeAgentMemories,
   writeGameTranscript,
   writeSocialMemory,
-  writeOpponentImpressions,
+  createPost,
   pruneMemories,
 } from "./writer";
 export { searchMemories } from "./search";
+export { generateEmbedding } from "./embeddings";

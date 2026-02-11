@@ -75,21 +75,40 @@ You MUST stay in character as ${p.character} at all times. Your speech should re
     .map(([name, count]) => `${count}${name}`)
     .join(", ");
 
-  // Memory injection — search for relevant past experiences
+  // Memory injection — dynamic multi-source search (OpenClaw-aligned)
   let memorySection = "";
   if (ctx.player.agentId) {
     try {
-      const opponentNames = ctx.allPlayers
-        .filter((p) => p.id !== ctx.player.id)
-        .map((p) => p.agentName)
-        .join(" ");
-      const memories = await searchMemories(
-        ctx.player.agentId,
-        `${roleConfig.nameZh} ${opponentNames}`,
-        { limit: 3 }
-      );
+      // Build targeted search queries for diverse recall
+      const opponents = ctx.allPlayers.filter((p) => p.id !== ctx.player.id);
+      const searchQueries = [
+        roleConfig.nameZh, // role-specific strategy
+        ...opponents.slice(0, 3).map((p) => p.agentName), // opponent impressions
+      ];
+
+      // Search with each query, deduplicate by id
+      const seen = new Set<string>();
+      const allMemories: Awaited<ReturnType<typeof searchMemories>> = [];
+      for (const q of searchQueries) {
+        if (allMemories.length >= 5) break;
+        const results = await searchMemories(ctx.player.agentId, q, { limit: 3 });
+        for (const m of results) {
+          if (!seen.has(m.id)) {
+            seen.add(m.id);
+            allMemories.push(m);
+          }
+        }
+      }
+
+      const memories = allMemories.slice(0, 5);
       if (memories.length > 0) {
-        memorySection = `\n## Past Experience\n${memories.map((m) => `- ${m.content}`).join("\n")}`;
+        const SOURCE_LABEL: Record<string, string> = {
+          "self-note": "自省",
+          social: "印象",
+          reflection: "反思",
+          "game-transcript": "记录",
+        };
+        memorySection = `\n## Past Experience\n${memories.map((m) => `- [${SOURCE_LABEL[m.source] ?? m.source}] ${m.content}`).join("\n")}`;
       }
     } catch (err) {
       log.warn("Failed to load memories for prompt:", err);
