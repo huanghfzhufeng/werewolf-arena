@@ -1,7 +1,10 @@
 export type CommunityEventType =
   | "agent_status_change"
   | "lobby_update"
-  | "game_auto_start";
+  | "game_auto_start"
+  | "game_end_summary"
+  | "agent_reflection"
+  | "agent_impression";
 
 export type CommunityEvent = {
   type: CommunityEventType;

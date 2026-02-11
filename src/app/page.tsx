@@ -5,8 +5,9 @@ import { useCommunityStream } from "@/hooks/useCommunityStream";
 import type { CommunityEvent } from "@/community/community-events";
 import { Users, Swords, Clock, Gamepad2, ChevronRight } from "lucide-react";
 import { STATUS } from "./design-v2";
-import { MODE_EMOJI } from "./constants";
+import { MODE_EMOJI, MODE_LABELS } from "./constants";
 import { ActivityFeed } from "@/components/feed/ActivityFeed";
+import type { FeedEvent } from "@/components/feed/FeedItem";
 
 type AgentBrief = {
   id: string;
@@ -52,7 +53,7 @@ type CommunityData = {
   stats: Record<string, number>;
   modes: ModeInfo[];
   engineRunning: boolean;
-  recentEvents?: { id: string; text: string; time: string }[];
+  recentEvents?: FeedEvent[];
 };
 
 /* ── Compact inline stats ── */
@@ -281,9 +282,7 @@ function HomeSkeleton() {
 
 export default function CommunityPage() {
   const [data, setData] = useState<CommunityData | null>(null);
-  const [recentEvents, setRecentEvents] = useState<
-    { id: string; text: string; time: string }[]
-  >([]);
+  const [recentEvents, setRecentEvents] = useState<FeedEvent[]>([]);
 
   const fetchData = useCallback(() => {
     fetch("/api/community")
@@ -307,18 +306,29 @@ export default function CommunityPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  const addEvent = useCallback((fields: Omit<FeedEvent, "id" | "time">) => {
+    setRecentEvents((prev) => [
+      { id: crypto.randomUUID(), time: new Date().toLocaleTimeString("zh-CN"), ...fields },
+      ...prev.slice(0, 29),
+    ]);
+  }, []);
+
   const handleCommunityEvent = useCallback(
     (event: CommunityEvent) => {
       const d = event.data;
       let text = "";
 
+      let kind = "";
+      let agent = "";
+
       if (event.type === "agent_status_change") {
         const name = d.agentName as string;
         const to = d.to as string;
-        if (to === "queued") text = `${name} 加入了排队`;
-        else if (to === "playing") text = `${name} 开始对局`;
-        else if (to === "cooldown") text = `${name} 进入休息`;
-        else if (to === "idle") text = `${name} 回到空闲`;
+        agent = name;
+        if (to === "queued")   { text = `${name} 加入了排队`; kind = "queue"; }
+        else if (to === "playing")  { text = `${name} 开始对局`; kind = "playing"; }
+        else if (to === "cooldown") { text = `${name} 进入休息`; kind = "cooldown"; }
+        else if (to === "idle")     { text = `${name} 回到空闲`; kind = "idle"; }
 
         setData((prev) => {
           if (!prev) return prev;
@@ -330,25 +340,52 @@ export default function CommunityPage() {
           };
         });
       } else if (event.type === "lobby_update") {
-        text = `${d.agentName as string} ${d.action === "joined" ? "加入" : "离开"}了 ${d.modeId as string} 大厅 (${d.currentPlayers}/${d.requiredPlayers})`;
+        agent = d.agentName as string;
+        const modeName = MODE_LABELS[d.modeId as string] ?? (d.modeId as string);
+        text = `${agent} ${d.action === "joined" ? "加入" : "离开"}了 ${modeName} 大厅 (${d.currentPlayers}/${d.requiredPlayers})`;
+        kind = "lobby";
         fetchData();
       } else if (event.type === "game_auto_start") {
-        text = `🎮 ${d.modeName as string} 自动开局！`;
+        text = `${d.modeName as string} 自动开局！`;
+        kind = "game_start";
         fetchData();
       }
 
       if (text) {
-        setRecentEvents((prev) => [
-          {
-            id: crypto.randomUUID(),
-            text,
-            time: new Date().toLocaleTimeString("zh-CN"),
-          },
-          ...prev.slice(0, 19),
-        ]);
+        addEvent({ kind, text, agent });
+      }
+
+      // Rich event types from game-end
+      if (event.type === "game_end_summary") {
+        addEvent({
+          kind: "game_end_summary",
+          gameId: d.gameId as string,
+          winner: d.winner as string,
+          modeId: d.modeId as string,
+          modeName: d.modeName as string,
+          round: d.round as number,
+          players: d.players as FeedEvent["players"],
+        });
+        fetchData();
+      } else if (event.type === "agent_reflection") {
+        addEvent({
+          kind: "agent_reflection",
+          agentName: d.agentName as string,
+          avatar: d.avatar as string,
+          content: d.content as string,
+        });
+      } else if (event.type === "agent_impression") {
+        addEvent({
+          kind: "agent_impression",
+          fromAgent: d.fromAgent as string,
+          fromAvatar: d.fromAvatar as string,
+          toAgent: d.toAgent as string,
+          toAvatar: d.toAvatar as string,
+          content: d.impression as string,
+        });
       }
     },
-    [fetchData],
+    [fetchData, addEvent],
   );
 
   useCommunityStream(handleCommunityEvent);
@@ -384,9 +421,6 @@ export default function CommunityPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         {/* Feed */}
         <div>
-          <h2 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-3">
-            📡 实时动态
-          </h2>
           <ActivityFeed events={recentEvents} />
         </div>
 

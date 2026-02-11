@@ -4,6 +4,7 @@ import type { Player } from "@/db/schema";
 import { ROLE_CONFIGS } from "@/engine/roles";
 import type { Role } from "@/engine/roles";
 import { chatCompletion } from "@/agents/llm-client";
+import { emitCommunity } from "@/community/community-events";
 import { createLogger } from "@/lib";
 import { eq, asc } from "drizzle-orm";
 import type { MemoryEntry } from "./types";
@@ -67,6 +68,18 @@ Be specific about player names and actions.`;
       content: reflection,
       tags: [role, won ? "win" : "loss", ...extractPlayerTags(allPlayers)],
       importance: won ? 0.7 : 0.8, // losses are more instructive
+    });
+
+    // Push to community feed
+    emitCommunity({
+      type: "agent_reflection",
+      data: {
+        agentName: player.agentName,
+        avatar: (player.personality as { avatar?: string })?.avatar ?? "🎭",
+        content: reflection,
+        gameId,
+        won,
+      },
     });
 
     log.info(`Wrote reflection for ${player.agentName}: ${reflection.slice(0, 60)}...`);
@@ -173,6 +186,19 @@ Format: 「Name: 印象」 per line. Only include opponents you have something m
         `对 ${name} 的印象: ${impression}`,
         [name, role, won ? "win" : "loss"]
       );
+
+      // Push to community feed
+      emitCommunity({
+        type: "agent_impression",
+        data: {
+          fromAgent: player.agentName,
+          fromAvatar: (player.personality as { avatar?: string })?.avatar ?? "🎭",
+          toAgent: name,
+          toAvatar: (opponent.personality as { avatar?: string })?.avatar ?? "🎭",
+          impression,
+          gameId,
+        },
+      });
     }
   } catch (err) {
     log.warn(`Failed to write opponent impressions for ${player.agentName}:`, err);

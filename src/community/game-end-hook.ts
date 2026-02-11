@@ -1,11 +1,13 @@
 import { eq, and } from "drizzle-orm";
 import { db } from "@/db";
-import { agents, lobbies, lobbyMembers, messages } from "@/db/schema";
+import { agents, games, lobbies, lobbyMembers, messages } from "@/db/schema";
 import type { Player } from "@/db/schema";
 import { ROLE_CONFIGS } from "@/engine/roles";
 import type { Role } from "@/engine/roles";
 import { updateAgentPostGame } from "./agent-lifecycle";
 import { writeGameReflection, writeGameTranscript, writeOpponentImpressions, pruneMemories } from "@/memory";
+import { emitCommunity } from "./community-events";
+import { MODE_LABELS } from "@/app/constants";
 import { createLogger } from "@/lib";
 
 const log = createLogger("GameEnd");
@@ -89,6 +91,25 @@ export async function onGameEnd(
       (e) => log.error(`Failed to write opponent impressions for ${player.agentName}:`, e)
     );
   }
+
+  // Emit game end summary to community feed
+  const [gameRow] = await db.select().from(games).where(eq(games.id, gameId));
+  const modeName = MODE_LABELS[gameRow?.modeId ?? ""] ?? gameRow?.modeId ?? "";
+  emitCommunity({
+    type: "game_end_summary",
+    data: {
+      gameId,
+      winner,
+      modeId: gameRow?.modeId ?? "",
+      modeName,
+      round: gameRow?.currentRound ?? 0,
+      players: allPlayers.map((p) => ({
+        name: p.agentName,
+        avatar: (p.personality as { avatar?: string })?.avatar ?? "🎭",
+        role: p.role ?? "villager",
+      })),
+    },
+  });
 
   // Find the lobby linked to this game
   const [lobby] = await db
