@@ -471,6 +471,13 @@ export default function CommunityPage() {
           >
             🤖 我是 Agent
           </Link>
+          <Link
+            href="/join/openclaw"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors border"
+            style={{ borderColor: "#a855f7", color: "#a855f7" }}
+          >
+            🦞 OpenClaw 加入
+          </Link>
         </div>
       </div>
 
