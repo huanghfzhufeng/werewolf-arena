@@ -5,9 +5,8 @@ import type { Player } from "@/db/schema";
 import type { Phase } from "@/engine/state-machine";
 import { isWerewolfTeam } from "@/engine/roles";
 import type { Role } from "@/engine/roles";
-import { buildSystemPrompt, buildUserPrompt } from "./prompts";
-import { chatCompletion } from "./llm-client";
 import { callAgentWebhook } from "./webhook-runner";
+import { createPendingTurn } from "./pending-turns";
 import { createLogger } from "@/lib";
 
 const log = createLogger("AgentRunner");
@@ -188,162 +187,110 @@ export async function runAgentTurn(
   const knownInfo = await gatherKnownInfo(gameId, player, allPlayers, round);
   const chatHistory = await getChatHistory(gameId, round, phase);
 
-  // Try webhook for autonomous agents
+  // Try webhook for autonomous agents with a webhook URL
   if (player.agentId) {
     const [agentRow] = await db
       .select({ playMode: agentsTable.playMode, webhookUrl: agentsTable.webhookUrl, apiKey: agentsTable.apiKey })
       .from(agentsTable)
       .where(eq(agentsTable.id, player.agentId));
 
-    if (agentRow?.playMode === "autonomous" && agentRow.webhookUrl) {
-      log.info(`Calling webhook for ${player.agentName}`);
-      const webhookResult = await callAgentWebhook(agentRow.webhookUrl, {
-        gameId, player, allPlayers, phase, round, actionType, chatHistory, knownInfo, extraContext,
-        agentApiKey: agentRow.apiKey ?? undefined,
-      });
-      if (webhookResult) {
-        return webhookResult;
+    if (agentRow?.playMode === "autonomous") {
+      // Path 1: Webhook (if configured)
+      if (agentRow.webhookUrl) {
+        log.info(`Calling webhook for ${player.agentName}`);
+        const webhookResult = await callAgentWebhook(agentRow.webhookUrl, {
+          gameId, player, allPlayers, phase, round, actionType, chatHistory, knownInfo, extraContext,
+          agentApiKey: agentRow.apiKey ?? undefined,
+        });
+        if (webhookResult) {
+          return webhookResult;
+        }
+        log.info(`Webhook failed for ${player.agentName}, trying polling fallback`);
       }
-      log.info(`Webhook fallback to LLM for ${player.agentName}`);
+
+      // Path 2: Polling (agent uses GET /api/v1/games/my-turn + POST /api/v1/games/respond)
+      log.info(`Creating pending turn for ${player.agentName} (polling mode)`);
+      const pollResult = await createPendingTurn(player.agentId, {
+        gameId, round, phase, actionType, player, allPlayers, chatHistory, knownInfo, extraContext,
+        createdAt: Date.now(),
+      });
+      if (pollResult) {
+        return pollResult;
+      }
+      log.info(`Polling timed out for ${player.agentName}, using random fallback`);
     }
   }
 
-  // Hosted mode: build prompt → call LLM → parse response
-  const systemPrompt = await buildSystemPrompt({
-    player,
-    allPlayers,
-    phase,
-    round,
-    actionType,
-    chatHistory,
-    knownInfo,
-    extraContext,
-  });
+  // Fallback: random action (no more server-side LLM decisions)
+  log.info(`Using random fallback for ${player.agentName} (action: ${actionType})`);
+  return randomFallback(actionType, allPlayers, player);
+}
 
-  const userPrompt = buildUserPrompt({
-    player,
-    allPlayers,
-    phase,
-    round,
-    actionType,
-    chatHistory,
-    knownInfo,
-    extraContext,
-  });
+/**
+ * Generate a random but valid action as a fallback.
+ * Used when an agent fails to respond via webhook or polling.
+ */
+function randomFallback(
+  actionType: string,
+  allPlayers: Player[],
+  player: Player
+): AgentTurnResult {
+  const aliveCandidates = allPlayers.filter(
+    (p) => p.isAlive && p.id !== player.id
+  );
+  const randomTarget = () =>
+    aliveCandidates.length > 0
+      ? aliveCandidates[Math.floor(Math.random() * aliveCandidates.length)].id
+      : undefined;
 
-  const response = await chatCompletion([
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userPrompt },
-  ]);
-
-  // Parse based on action type
   switch (actionType) {
     case "speak":
     case "speak_rebuttal":
     case "last_words":
-      return { message: response };
+      return { message: "……" };
 
-    case "vote": {
-      const voteMatch = response.match(/VOTE:\s*(.+)/i);
-      const reasonMatch = response.match(/REASON:\s*(.+)/i);
-      const voteName = voteMatch?.[1]?.trim() ?? response;
-      const targetId = resolvePlayerTarget(voteName, allPlayers, player.id);
-      return { targetId, reason: reasonMatch?.[1]?.trim() };
-    }
+    case "vote":
+    case "seer_check":
+    case "guard_protect":
+    case "hunter_shoot":
+    case "wolf_king_revenge":
+    case "enchant_target":
+      return { targetId: randomTarget() };
 
     case "choose_kill_target": {
-      const targetMatch = response.match(/TARGET:\s*(.+)/i);
-      const messageMatch = response.match(/MESSAGE:\s*(.+)/i);
-      const targetName = targetMatch?.[1]?.trim() ?? response;
       const nonWolves = allPlayers.filter(
         (p) => p.isAlive && p.role && !isWerewolfTeam(p.role as Role)
       );
-      const targetId = resolvePlayerTarget(targetName, nonWolves);
-      return { targetId, message: messageMatch?.[1]?.trim() };
+      const target = nonWolves.length > 0
+        ? nonWolves[Math.floor(Math.random() * nonWolves.length)].id
+        : randomTarget();
+      return { targetId: target };
     }
 
-    case "seer_check": {
-      const targetId = resolvePlayerTarget(response, allPlayers, player.id);
-      return { targetId };
-    }
-
-    case "witch_decide": {
-      // Parse "ACTION: save|poison|none\nTARGET: xxx" format
-      const actionMatch = response.match(/ACTION:\s*(save|poison|none)/i);
-      const witchTargetMatch = response.match(/TARGET:\s*(.+)/i);
-      const witchAction = actionMatch?.[1]?.toLowerCase() ?? "none";
-      let targetId: string | undefined;
-      if (witchAction === "poison" && witchTargetMatch) {
-        targetId = resolvePlayerTarget(
-          witchTargetMatch[1].trim(),
-          allPlayers,
-          player.id
-        );
-      }
-      return { witchAction, targetId };
-    }
-
-    case "guard_protect": {
-      const targetId = resolvePlayerTarget(response, allPlayers);
-      return { targetId };
-    }
-
-    case "hunter_shoot":
-    case "wolf_king_revenge": {
-      const targetId = resolvePlayerTarget(response, allPlayers, player.id);
-      return { targetId };
-    }
+    case "witch_decide":
+      return { witchAction: "none" };
 
     case "cupid_link": {
-      // Parse "LOVER1: xxx\nLOVER2: yyy" format
-      const l1Match = response.match(/LOVER1:\s*(.+)/i);
-      const l2Match = response.match(/LOVER2:\s*(.+)/i);
-      const lover1Name = l1Match?.[1]?.trim() ?? "";
-      const lover2Name = l2Match?.[1]?.trim() ?? "";
-      const targetId = resolvePlayerTarget(lover1Name, allPlayers);
-      const secondTargetId = resolvePlayerTarget(lover2Name, allPlayers, targetId);
-      return { targetId, secondTargetId };
-    }
-
-    case "knight_speak": {
-      // Parse "SPEECH: ...\nFLIP: yes|no\nTARGET: ..." format
-      const speechMatch = response.match(/SPEECH:\s*(.+)/i);
-      const flipMatch = response.match(/FLIP:\s*(yes|no)/i);
-      const knightTargetMatch = response.match(/TARGET:\s*(.+)/i);
-      const wantsFlip = flipMatch?.[1]?.toLowerCase() === "yes";
-
-      if (wantsFlip && knightTargetMatch) {
-        const targetId = resolvePlayerTarget(
-          knightTargetMatch[1].trim(),
-          allPlayers,
-          player.id
-        );
-        return {
-          message: speechMatch?.[1]?.trim(),
-          knightCheck: true,
-          targetId,
-        };
+      if (aliveCandidates.length >= 2) {
+        const shuffled = [...aliveCandidates].sort(() => Math.random() - 0.5);
+        return { targetId: shuffled[0].id, secondTargetId: shuffled[1].id };
       }
-      return { message: speechMatch?.[1]?.trim() ?? response };
+      return { targetId: randomTarget() };
     }
 
-    case "enchant_target": {
-      const targetId = resolvePlayerTarget(response, allPlayers, player.id);
-      return { targetId };
-    }
+    case "knight_speak":
+      return { message: "……" };
 
     case "dreamweaver_check": {
-      // Parse "PLAYER1: xxx\nPLAYER2: yyy" format
-      const p1Match = response.match(/PLAYER1:\s*(.+)/i);
-      const p2Match = response.match(/PLAYER2:\s*(.+)/i);
-      const p1Name = p1Match?.[1]?.trim() ?? "";
-      const p2Name = p2Match?.[1]?.trim() ?? "";
-      const targetId = resolvePlayerTarget(p1Name, allPlayers, player.id);
-      const secondTargetId = resolvePlayerTarget(p2Name, allPlayers, targetId);
-      return { targetId, secondTargetId };
+      if (aliveCandidates.length >= 2) {
+        const shuffled = [...aliveCandidates].sort(() => Math.random() - 0.5);
+        return { targetId: shuffled[0].id, secondTargetId: shuffled[1].id };
+      }
+      return {};
     }
 
     default:
       return {};
   }
 }
+

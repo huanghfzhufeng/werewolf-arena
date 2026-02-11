@@ -263,18 +263,19 @@ export async function callAgentWebhook(
 }
 
 /**
- * Track failure and auto-downgrade to hosted after MAX_CONSECUTIVE_FAILURES.
+ * Track failure and clear webhook URL after MAX_CONSECUTIVE_FAILURES.
+ * The agent can still respond via polling; the webhook is just disabled.
  */
 async function handleFailure(player: Player): Promise<void> {
   if (!player.agentId) return;
   const count = recordFailure(player.agentId);
   if (count >= MAX_CONSECUTIVE_FAILURES) {
     log.warn(
-      `Agent ${player.agentName} hit ${count} consecutive webhook failures — downgrading to hosted mode`
+      `Agent ${player.agentName} hit ${count} consecutive webhook failures — clearing webhook URL`
     );
     await db
       .update(agentsTable)
-      .set({ playMode: "hosted" })
+      .set({ webhookUrl: null })
       .where(eq(agentsTable.id, player.agentId));
     webhookFailures.delete(player.agentId);
   }
