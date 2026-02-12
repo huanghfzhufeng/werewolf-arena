@@ -1,5 +1,29 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeMessage, sanitizeTarget, validateResponse } from "../webhook-runner";
+import {
+  sanitizeMessage,
+  sanitizeTarget,
+  validateResponse,
+  parseWebhookResponse,
+} from "../webhook-runner";
+import type { Player } from "@/db/schema";
+
+function makePlayer(overrides: Partial<Player> & { id: string; agentName: string }): Player {
+  return {
+    gameId: "game-1",
+    agentId: null,
+    role: "villager",
+    isAlive: true,
+    personality: "{}",
+    seatNumber: 1,
+    ...overrides,
+  } as Player;
+}
+
+const players = [
+  makePlayer({ id: "1", agentName: "鸣人", seatNumber: 1 }),
+  makePlayer({ id: "2", agentName: "佐助", seatNumber: 2 }),
+  makePlayer({ id: "3", agentName: "小樱", seatNumber: 3 }),
+];
 
 describe("sanitizeMessage", () => {
   it("truncates to 500 characters", () => {
@@ -62,10 +86,46 @@ describe("validateResponse", () => {
   it("validates cupid_link: requires target and second_target", () => {
     expect(validateResponse({ target: "A", second_target: "B" }, "cupid_link").valid).toBe(true);
     expect(validateResponse({ target: "A" }, "cupid_link").valid).toBe(false);
+    expect(validateResponse({ target: "A", second_target: "A" }, "cupid_link").valid).toBe(false);
     expect(validateResponse({}, "cupid_link").valid).toBe(false);
+  });
+
+  it("validates dreamweaver_check: requires two different targets", () => {
+    expect(validateResponse({ target: "A", second_target: "B" }, "dreamweaver_check").valid).toBe(true);
+    expect(validateResponse({ target: "A", second_target: "A" }, "dreamweaver_check").valid).toBe(false);
+    expect(validateResponse({ target: "A" }, "dreamweaver_check").valid).toBe(false);
+  });
+
+  it("validates knight_speak: message or flip+target", () => {
+    expect(validateResponse({ message: "我先发言" }, "knight_speak").valid).toBe(true);
+    expect(validateResponse({ flip: true, target: "佐助" }, "knight_speak").valid).toBe(true);
+    expect(validateResponse({ flip: true }, "knight_speak").valid).toBe(false);
+    expect(validateResponse({}, "knight_speak").valid).toBe(false);
   });
 
   it("unknown action type passes", () => {
     expect(validateResponse({}, "unknown_action").valid).toBe(true);
+  });
+});
+
+describe("parseWebhookResponse", () => {
+  it("parses knight flip response", () => {
+    const result = parseWebhookResponse(
+      { flip: true, target: "佐助" },
+      "knight_speak",
+      players,
+      "1"
+    );
+    expect(result).toEqual({ targetId: "2", knightCheck: true });
+  });
+
+  it("drops duplicate cupid targets", () => {
+    const result = parseWebhookResponse(
+      { target: "佐助", second_target: "佐助" },
+      "cupid_link",
+      players,
+      "1"
+    );
+    expect(result).toEqual({ targetId: "2", secondTargetId: undefined });
   });
 });

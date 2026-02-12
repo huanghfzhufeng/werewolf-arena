@@ -78,6 +78,7 @@ export function validateResponse(
   switch (actionType) {
     case "speak":
     case "speak_rebuttal":
+    case "last_words":
       if (typeof data.message !== "string" || data.message.trim().length === 0) {
         return { valid: false, reason: "Missing or empty 'message' field" };
       }
@@ -89,6 +90,7 @@ export function validateResponse(
     case "hunter_shoot":
     case "wolf_king_revenge":
     case "choose_kill_target":
+    case "enchant_target":
       if (typeof data.target !== "string" || data.target.trim().length === 0) {
         return { valid: false, reason: "Missing or empty 'target' field" };
       }
@@ -106,16 +108,76 @@ export function validateResponse(
     }
 
     case "cupid_link":
+    case "dreamweaver_check":
       if (typeof data.target !== "string" || data.target.trim().length === 0) {
-        return { valid: false, reason: "Missing 'target' for cupid_link" };
+        return { valid: false, reason: "Missing 'target'" };
       }
       if (typeof data.second_target !== "string" || data.second_target.trim().length === 0) {
-        return { valid: false, reason: "Missing 'second_target' for cupid_link" };
+        return { valid: false, reason: "Missing 'second_target'" };
+      }
+      if (data.target.trim() === data.second_target.trim()) {
+        return { valid: false, reason: "'target' and 'second_target' must be different" };
       }
       return { valid: true };
 
+    case "knight_speak": {
+      const flip =
+        data.flip === true ||
+        data.flip === "true" ||
+        data.flip === 1 ||
+        data.flip === "1";
+      if (flip) {
+        if (typeof data.target !== "string" || data.target.trim().length === 0) {
+          return { valid: false, reason: "'target' is required when flip=true" };
+        }
+        return { valid: true };
+      }
+      if (typeof data.message !== "string" || data.message.trim().length === 0) {
+        return { valid: false, reason: "Missing or empty 'message' field" };
+      }
+      return { valid: true };
+    }
+
     default:
       return { valid: true };
+  }
+}
+
+function isResolvedResultValid(result: AgentTurnResult, actionType: string): boolean {
+  switch (actionType) {
+    case "speak":
+    case "speak_rebuttal":
+    case "last_words":
+      return typeof result.message === "string" && result.message.length > 0;
+
+    case "vote":
+    case "seer_check":
+    case "guard_protect":
+    case "hunter_shoot":
+    case "wolf_king_revenge":
+    case "choose_kill_target":
+    case "enchant_target":
+      return typeof result.targetId === "string";
+
+    case "witch_decide":
+      if (!result.witchAction) return false;
+      if (result.witchAction === "poison") return typeof result.targetId === "string";
+      return true;
+
+    case "cupid_link":
+    case "dreamweaver_check":
+      return (
+        typeof result.targetId === "string" &&
+        typeof result.secondTargetId === "string" &&
+        result.targetId !== result.secondTargetId
+      );
+
+    case "knight_speak":
+      if (result.knightCheck) return typeof result.targetId === "string";
+      return typeof result.message === "string" && result.message.length > 0;
+
+    default:
+      return true;
   }
 }
 
@@ -248,7 +310,14 @@ export async function callAgentWebhook(
     }
 
     // Parse and sanitize
-    const result = parseWebhookResponse(data, allPlayers, player.id);
+    const result = parseWebhookResponse(data, actionType, allPlayers, player.id);
+    if (!isResolvedResultValid(result, actionType)) {
+      log.warn(
+        `Webhook response could not resolve valid targets for ${player.agentName} (${actionType})`
+      );
+      await handleFailure(player);
+      return null;
+    }
     if (player.agentId) recordSuccess(player.agentId);
     return result;
   } catch (err) {
@@ -285,8 +354,10 @@ async function handleFailure(player: Player): Promise<void> {
  * Parse the webhook response into an AgentTurnResult.
  * Applies sanitization to all string fields.
  */
-function parseWebhookResponse(
+/** @internal Exported for testing */
+export function parseWebhookResponse(
   data: Record<string, unknown>,
+  actionType: string,
   allPlayers: Player[],
   excludeId: string
 ): AgentTurnResult {
@@ -309,9 +380,13 @@ function parseWebhookResponse(
   if (typeof data.second_target === "string") {
     const targetName = sanitizeTarget(data.second_target);
     const target = allPlayers.find(
-      (p) => p.isAlive && p.agentName === targetName
+      (p) => p.isAlive && p.id !== excludeId && p.agentName === targetName
     );
     result.secondTargetId = target?.id;
+  }
+
+  if (result.targetId && result.secondTargetId && result.targetId === result.secondTargetId) {
+    result.secondTargetId = undefined;
   }
 
   // Witch action
@@ -319,6 +394,17 @@ function parseWebhookResponse(
     const action = data.witch_action.trim().toLowerCase();
     if (action === "save" || action === "poison" || action === "none") {
       result.witchAction = action;
+    }
+  }
+
+  if (actionType === "knight_speak") {
+    const flip =
+      data.flip === true ||
+      data.flip === "true" ||
+      data.flip === 1 ||
+      data.flip === "1";
+    if (flip) {
+      result.knightCheck = true;
     }
   }
 
