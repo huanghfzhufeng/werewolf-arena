@@ -97,7 +97,86 @@ export default function GamePage({
         break;
       }
       case "witch_action":
-        setFeed((prev) => [...prev, { id: crypto.randomUUID(), kind: "system", content: event.data.description as string, isPrivate: true, round: event.round, timestamp: event.timestamp }]);
+        setFeed((prev) => {
+          const action = event.data.action as string | undefined;
+          const targetName = (event.data.targetName as string | undefined) ?? "未知目标";
+          const content =
+            action === "save"
+              ? `🧪 女巫使用了解药，救下了 ${targetName}。`
+              : action === "poison"
+                ? `🧪 女巫使用了毒药，目标是 ${targetName}。`
+                : "🧪 女巫本回合没有使用药剂。";
+          return [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              kind: "system",
+              content,
+              isPrivate: true,
+              round: event.round,
+              timestamp: event.timestamp,
+            },
+          ];
+        });
+        break;
+      case "enchant_action":
+        setFeed((prev) => [...prev, {
+          id: crypto.randomUUID(),
+          kind: "system",
+          content: `✨ 魅惑师施法，目标是 ${(event.data.targetName as string | undefined) ?? "未知目标"}。`,
+          round: event.round,
+          timestamp: event.timestamp,
+        }]);
+        break;
+      case "dreamweaver_result": {
+        const target1 = (event.data.target1Name as string | undefined) ?? "未知1";
+        const target2 = (event.data.target2Name as string | undefined) ?? "未知2";
+        const result = event.data.result as string | undefined;
+        const content = result === "same_team"
+          ? `🕸️ 织梦者查验 ${target1} 与 ${target2}：同阵营。`
+          : `🕸️ 织梦者查验 ${target1} 与 ${target2}：不同阵营。`;
+        setFeed((prev) => [...prev, {
+          id: crypto.randomUUID(),
+          kind: "system",
+          content,
+          round: event.round,
+          timestamp: event.timestamp,
+        }]);
+        break;
+      }
+      case "knight_check": {
+        const result = event.data.result as string | undefined;
+        const knightName = (event.data.knightName as string | undefined) ?? "骑士";
+        const targetName = (event.data.targetName as string | undefined) ?? "目标";
+        const targetId = event.data.targetId as string | undefined;
+        const knightId = event.data.knightId as string | undefined;
+
+        if (result === "wolf_found" && targetId) {
+          setPlayerList((prev) => prev.map((p) => p.id === targetId ? { ...p, isAlive: false } : p));
+        } else if (result === "not_wolf" && knightId) {
+          setPlayerList((prev) => prev.map((p) => p.id === knightId ? { ...p, isAlive: false } : p));
+        }
+
+        const content = result === "wolf_found"
+          ? `⚔️ ${knightName} 翻验 ${targetName} 为狼人，${targetName} 立即出局。`
+          : `⚔️ ${knightName} 翻验 ${targetName} 不是狼人，${knightName} 出局。`;
+        setFeed((prev) => [...prev, {
+          id: crypto.randomUUID(),
+          kind: "system",
+          content,
+          round: event.round,
+          timestamp: event.timestamp,
+        }]);
+        break;
+      }
+      case "idiot_reveal":
+        setFeed((prev) => [...prev, {
+          id: crypto.randomUUID(),
+          kind: "system",
+          content: `🃏 ${(event.data.playerName as string | undefined) ?? "该玩家"} 翻牌为白痴，免于本次出局并失去投票权。`,
+          round: event.round,
+          timestamp: event.timestamp,
+        }]);
         break;
       case "hunter_shoot":
         setFeed((prev) => [...prev, { id: crypto.randomUUID(), kind: "system", content: `🔫 ${event.data.hunterName as string} 发动了猎人技能，带走了 ${event.data.targetName as string}！`, round: event.round, timestamp: event.timestamp }]);
