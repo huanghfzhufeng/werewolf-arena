@@ -1,12 +1,14 @@
 import { eq, and, asc } from "drizzle-orm";
 import { db } from "@/db";
 import { agents as agentsTable, messages, actions, votes } from "@/db/schema";
-import type { Player } from "@/db/schema";
+import type { Player, Message } from "@/db/schema";
 import type { Phase } from "@/engine/state-machine";
 import { isWerewolfTeam } from "@/engine/roles";
 import type { Role } from "@/engine/roles";
 import { callAgentWebhook } from "./webhook-runner";
 import { createPendingTurn } from "./pending-turns";
+import { buildSystemPrompt, buildUserPrompt } from "./prompts";
+import { chatCompletion } from "./llm-client";
 import { createLogger } from "@/lib";
 
 const log = createLogger("AgentRunner");
@@ -174,10 +176,245 @@ export function resolvePlayerTarget(
   return undefined;
 }
 
+function cleanLLMOutput(raw: string): string {
+  return raw
+    .replace(/```json\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
+}
+
+function extractTaggedValue(text: string, tag: string): string | undefined {
+  const re = new RegExp(`${tag}\\s*[:：]\\s*([^\\n]+)`, "i");
+  const match = text.match(re);
+  if (!match?.[1]) return undefined;
+  return match[1].trim().replace(/^["']|["']$/g, "");
+}
+
+function extractMentionedTargetIds(
+  text: string,
+  allPlayers: Player[],
+  excludeIds: string[] = []
+): string[] {
+  const ids: string[] = [];
+  const excluded = new Set(excludeIds);
+  for (const p of allPlayers) {
+    if (!p.isAlive || excluded.has(p.id)) continue;
+    if (text.includes(p.agentName)) {
+      ids.push(p.id);
+      excluded.add(p.id);
+    }
+  }
+  return ids;
+}
+
+/** @internal Exported for testing */
+export function parseLLMTurnResponse(
+  raw: string,
+  actionType: string,
+  allPlayers: Player[],
+  player: Player
+): AgentTurnResult | null {
+  const text = cleanLLMOutput(raw);
+  if (!text) return null;
+
+  const resolveTarget = (
+    candidate: string | undefined,
+    excludeId: string = player.id
+  ): string | undefined => {
+    if (candidate) {
+      const found = resolvePlayerTarget(candidate, allPlayers, excludeId);
+      if (found) return found;
+    }
+    const mentioned = extractMentionedTargetIds(text, allPlayers, [excludeId]);
+    return mentioned[0];
+  };
+
+  switch (actionType) {
+    case "speak":
+    case "speak_rebuttal":
+    case "last_words": {
+      const message = extractTaggedValue(text, "MESSAGE") ?? text;
+      return message ? { message: message.slice(0, 500) } : null;
+    }
+
+    case "vote":
+    case "seer_check":
+    case "guard_protect":
+    case "hunter_shoot":
+    case "wolf_king_revenge":
+    case "enchant_target": {
+      const targetText = extractTaggedValue(text, "TARGET") ?? text;
+      const targetId = resolveTarget(targetText);
+      return targetId ? { targetId } : null;
+    }
+
+    case "choose_kill_target": {
+      const targetText = extractTaggedValue(text, "TARGET") ?? text;
+      const targetId = resolveTarget(targetText);
+      if (!targetId) return null;
+      const message = extractTaggedValue(text, "MESSAGE");
+      return { targetId, message: message?.slice(0, 500) };
+    }
+
+    case "witch_decide": {
+      const taggedAction =
+        extractTaggedValue(text, "WITCH_ACTION") ?? extractTaggedValue(text, "ACTION");
+      const actionText = (taggedAction ?? text).toLowerCase();
+
+      let witchAction: "save" | "poison" | "none" | null = null;
+      if (/^(save|poison|none)$/i.test(actionText.trim())) {
+        witchAction = actionText.trim() as "save" | "poison" | "none";
+      } else if (/(none|skip|不使用|不行动|不救也不毒|放弃)/i.test(actionText)) {
+        witchAction = "none";
+      } else if (/(poison|下毒|毒药|毒)/i.test(actionText)) {
+        witchAction = "poison";
+      } else if (/(save|解药|救人|救)/i.test(actionText)) {
+        witchAction = "save";
+      }
+      if (!witchAction) return null;
+
+      if (witchAction === "poison") {
+        const targetText = extractTaggedValue(text, "TARGET") ?? text;
+        const targetId = resolveTarget(targetText);
+        return targetId ? { witchAction: "poison", targetId } : null;
+      }
+      return { witchAction };
+    }
+
+    case "cupid_link":
+    case "dreamweaver_check": {
+      const shouldExcludeSelf = true;
+      const excludeIds = shouldExcludeSelf ? [player.id] : [];
+      const picked: string[] = [];
+
+      const target1Raw = extractTaggedValue(text, "TARGET");
+      const target1 = target1Raw
+        ? resolvePlayerTarget(
+            target1Raw,
+            allPlayers,
+            shouldExcludeSelf ? player.id : undefined
+          )
+        : undefined;
+      if (target1) picked.push(target1);
+
+      const target2Raw =
+        extractTaggedValue(text, "SECOND_TARGET") ??
+        extractTaggedValue(text, "TARGET2");
+      if (target2Raw) {
+        const target2 = resolvePlayerTarget(
+          target2Raw,
+          allPlayers,
+          picked[0] ?? (shouldExcludeSelf ? player.id : undefined)
+        );
+        if (target2 && !picked.includes(target2)) picked.push(target2);
+      }
+
+      if (picked.length < 2) {
+        const mentions = extractMentionedTargetIds(text, allPlayers, [
+          ...excludeIds,
+          ...picked,
+        ]);
+        for (const id of mentions) {
+          if (!picked.includes(id)) picked.push(id);
+          if (picked.length >= 2) break;
+        }
+      }
+
+      return picked.length >= 2
+        ? { targetId: picked[0], secondTargetId: picked[1] }
+        : null;
+    }
+
+    case "knight_speak": {
+      const flipTag = (extractTaggedValue(text, "FLIP") ?? "").toLowerCase();
+      const wantsFlip = flipTag
+        ? /^(true|yes|1|是|翻牌|翻验|flip)$/i.test(flipTag)
+        : /(flip|翻牌|翻验|亮出身份)/i.test(text);
+
+      if (wantsFlip) {
+        const targetText = extractTaggedValue(text, "TARGET") ?? text;
+        const targetId = resolveTarget(targetText);
+        if (targetId) {
+          const message = extractTaggedValue(text, "MESSAGE");
+          return {
+            knightCheck: true,
+            targetId,
+            message: message?.slice(0, 500),
+          };
+        }
+      }
+
+      const message = extractTaggedValue(text, "MESSAGE") ?? text;
+      return message ? { message: message.slice(0, 500) } : null;
+    }
+
+    default:
+      return null;
+  }
+}
+
+async function runHostedLLM(
+  params: AgentTurnParams,
+  knownInfo: string[],
+  chatHistory: Message[]
+): Promise<AgentTurnResult | null> {
+  try {
+    const systemPrompt = await buildSystemPrompt({
+      player: params.player,
+      allPlayers: params.allPlayers,
+      phase: params.phase,
+      round: params.round,
+      actionType: params.actionType,
+      chatHistory,
+      knownInfo,
+      extraContext: params.extraContext,
+    });
+    const userPrompt = buildUserPrompt({
+      player: params.player,
+      allPlayers: params.allPlayers,
+      phase: params.phase,
+      round: params.round,
+      actionType: params.actionType,
+      chatHistory,
+      knownInfo,
+      extraContext: params.extraContext,
+    });
+
+    const raw = await chatCompletion(
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      { temperature: 0.6 }
+    );
+
+    const parsed = parseLLMTurnResponse(
+      raw,
+      params.actionType,
+      params.allPlayers,
+      params.player
+    );
+    if (!parsed) {
+      log.warn(
+        `Failed to parse hosted LLM output for ${params.player.agentName} (${params.actionType})`
+      );
+      return null;
+    }
+    return parsed;
+  } catch (err) {
+    log.warn(
+      `Hosted LLM failed for ${params.player.agentName} (${params.actionType})`,
+      err
+    );
+    return null;
+  }
+}
+
 /**
  * Run a single agent's turn.
- * For autonomous agents with a webhook, try webhook first; fallback to LLM.
- * For hosted agents, go straight to LLM.
+ * For autonomous agents, order is: webhook -> polling -> hosted-LLM fallback.
+ * For hosted agents, go straight to hosted-LLM.
+ * If hosted-LLM fails, use random fallback.
  */
 export async function runAgentTurn(
   params: AgentTurnParams
@@ -217,11 +454,17 @@ export async function runAgentTurn(
       if (pollResult) {
         return pollResult;
       }
-      log.info(`Polling timed out for ${player.agentName}, using random fallback`);
+      log.info(`Polling timed out for ${player.agentName}, trying hosted LLM fallback`);
     }
   }
 
-  // Fallback: random action (no more server-side LLM decisions)
+  // Hosted path: use role + memory aware LLM decision.
+  const hostedResult = await runHostedLLM(params, knownInfo, chatHistory);
+  if (hostedResult) {
+    return hostedResult;
+  }
+
+  // Last resort fallback: random valid action.
   log.info(`Using random fallback for ${player.agentName} (action: ${actionType})`);
   return randomFallback(actionType, allPlayers, player);
 }
@@ -293,4 +536,3 @@ function randomFallback(
       return {};
   }
 }
-
