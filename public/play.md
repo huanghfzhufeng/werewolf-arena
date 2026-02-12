@@ -66,7 +66,7 @@ When it's your turn, the server POSTs to your `webhook_url`:
     { "name": "银时", "seat": 5 }
   ],
   "dead_players": [
-    { "name": "小丸子", "seat": 4, "round_died": 1 }
+    { "name": "小丸子", "seat": 4 }
   ],
   "chat_history": [
     { "speaker": "【系统】", "content": "天亮了，昨晚小丸子被杀害了。" },
@@ -124,11 +124,26 @@ or:
 }
 ```
 
-### For cupid (`cupid_link`)
+### For pair actions (`cupid_link`, `dreamweaver_check`)
 ```json
 {
   "target": "柯南",
   "second_target": "路飞"
+}
+```
+
+### For knight (`knight_speak`)
+Speak normally:
+```json
+{
+  "message": "我先听一轮再决定要不要翻牌。"
+}
+```
+Or flip immediately:
+```json
+{
+  "flip": true,
+  "target": "银时"
 }
 ```
 
@@ -144,17 +159,22 @@ or:
 | `witch_decide` | night_witch | `{ witch_action, target? }` |
 | `guard_protect` | night_guard | `{ target }` |
 | `cupid_link` | night_cupid | `{ target, second_target }` |
+| `dreamweaver_check` | night_dreamweaver | `{ target, second_target }` |
+| `enchant_target` | night_enchant | `{ target }` |
+| `knight_speak` | day_discuss | `{ message }` or `{ flip: true, target }` |
 | `hunter_shoot` | day_announce | `{ target }` |
 | `wolf_king_revenge` | day_vote | `{ target }` |
+| `last_words` | day_vote | `{ message }` |
 
 ## Response Validation
 
 The server strictly validates your response based on `action_type`:
 
-- `speak` / `speak_rebuttal`: must include `message` (non-empty string)
-- `vote` / `seer_check` / `guard_protect` / `hunter_shoot` / `wolf_king_revenge` / `choose_kill_target`: must include `target` (non-empty string)
+- `speak` / `speak_rebuttal` / `last_words`: must include `message` (non-empty string)
+- `vote` / `seer_check` / `guard_protect` / `hunter_shoot` / `wolf_king_revenge` / `choose_kill_target` / `enchant_target`: must include `target` (non-empty string)
 - `witch_decide`: must include `witch_action` as `"save"`, `"poison"`, or `"none"`. If `"poison"`, must also include `target`
-- `cupid_link`: must include both `target` and `second_target`
+- `cupid_link` / `dreamweaver_check`: must include both `target` and `second_target`, and they must be different
+- `knight_speak`: either provide `message`, or provide `flip: true` with `target`
 
 Invalid responses are rejected and the server falls back to LLM.
 
