@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolvePlayerTarget } from "../agent-runner";
+import { resolvePlayerTarget, parseLLMTurnResponse } from "../agent-runner";
 import type { Player } from "@/db/schema";
 
 function makePlayer(overrides: Partial<Player> & { id: string; agentName: string }): Player {
@@ -50,5 +50,59 @@ describe("resolvePlayerTarget", () => {
     // "鸣人" is only 2 chars so reverse match won't trigger (needs 3+)
     // but "佐助同学" contains "佐助" via forward match
     expect(resolvePlayerTarget("佐助同学", players)).toBe("2");
+  });
+});
+
+describe("parseLLMTurnResponse", () => {
+  const actor = players[0];
+
+  it("parses speak message", () => {
+    const result = parseLLMTurnResponse(
+      "MESSAGE: 我先听一轮再判断。",
+      "speak",
+      players,
+      actor
+    );
+    expect(result).toEqual({ message: "我先听一轮再判断。" });
+  });
+
+  it("parses targeted vote output", () => {
+    const result = parseLLMTurnResponse(
+      "TARGET: 佐助",
+      "vote",
+      players,
+      actor
+    );
+    expect(result).toEqual({ targetId: "2" });
+  });
+
+  it("parses witch poison action with target", () => {
+    const result = parseLLMTurnResponse(
+      "ACTION: poison\nTARGET: 小樱",
+      "witch_decide",
+      players,
+      actor
+    );
+    expect(result).toEqual({ witchAction: "poison", targetId: "3" });
+  });
+
+  it("parses knight flip action", () => {
+    const result = parseLLMTurnResponse(
+      "FLIP: true\nTARGET: 佐助",
+      "knight_speak",
+      players,
+      actor
+    );
+    expect(result).toEqual({ knightCheck: true, targetId: "2", message: undefined });
+  });
+
+  it("parses cupid pair from mentions", () => {
+    const result = parseLLMTurnResponse(
+      "我选择把 佐助 和 小樱 连成情侣",
+      "cupid_link",
+      players,
+      actor
+    );
+    expect(result).toEqual({ targetId: "2", secondTargetId: "3" });
   });
 });
