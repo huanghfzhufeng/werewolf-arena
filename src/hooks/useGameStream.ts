@@ -61,6 +61,10 @@ export function useGameStream(
       "witch_action",
       "hunter_shoot",
       "wolf_king_revenge",
+      "dreamweaver_result",
+      "knight_check",
+      "idiot_reveal",
+      "enchant_action",
     ];
 
     for (const type of eventTypes) {
