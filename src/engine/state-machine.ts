@@ -1233,24 +1233,31 @@ export async function runGameLoop(gameId: string) {
 
     // ── DAY: First Speech Round (seat order starting from victim's next seat) ──
     await updatePhase(gameId, "day_discuss");
-    const aliveDayPlayers = postNightPlayers.filter((p) => p.isAlive);
+    const dayPlayers = await getAllPlayers(gameId);
+    const aliveDayPlayers = dayPlayers.filter((p) => p.isAlive);
 
     // Determine speech order: start from the seat AFTER the first victim
     const firstVictimSeat = nightDeaths.length > 0
       ? preResolvePlayers.find((p) => p.id === nightDeaths[0].playerId)?.seatNumber ?? 0
       : 0;
-    const sortedSpeakers = [...aliveDayPlayers].sort((a, b) => {
+    const sortedSpeakerIds = [...aliveDayPlayers]
+      .sort((a, b) => {
       // Rotate so that seats after the victim come first
-      const offsetA = (a.seatNumber - firstVictimSeat - 1 + postNightPlayers.length) % postNightPlayers.length;
-      const offsetB = (b.seatNumber - firstVictimSeat - 1 + postNightPlayers.length) % postNightPlayers.length;
+      const offsetA = (a.seatNumber - firstVictimSeat - 1 + dayPlayers.length) % dayPlayers.length;
+      const offsetB = (b.seatNumber - firstVictimSeat - 1 + dayPlayers.length) % dayPlayers.length;
       return offsetA - offsetB;
-    });
+      })
+      .map((p) => p.id);
 
     // Track if knight uses ability this round (game breaks out of speech loop)
     let knightFlippedThisRound = false;
 
-    for (const player of sortedSpeakers) {
+    for (const speakerId of sortedSpeakerIds) {
       if (knightFlippedThisRound) break;
+
+      const currentPlayers = await getAllPlayers(gameId);
+      const player = currentPlayers.find((p) => p.id === speakerId);
+      if (!player || !player.isAlive) continue;
 
       // Judge introduces speaker
       const introMsg = await narrateSpeakerIntro(player.agentName, player.seatNumber);
@@ -1273,7 +1280,7 @@ export async function runGameLoop(gameId: string) {
       const result = await runAgentTurn({
         gameId,
         player,
-        allPlayers: postNightPlayers,
+        allPlayers: currentPlayers,
         phase: "day_discuss",
         round,
         actionType: isKnightWithAbility ? "knight_speak" : "speak",
@@ -1281,7 +1288,7 @@ export async function runGameLoop(gameId: string) {
 
       // Handle knight card flip
       if (isKnightWithAbility && result.knightCheck && result.targetId) {
-        const target = postNightPlayers.find((p) => p.id === result.targetId);
+        const target = currentPlayers.find((p) => p.id === result.targetId);
         const targetRole = target?.role as Role | undefined;
         const targetIsWolf = targetRole ? isWerewolfTeam(targetRole) && targetRole !== "madman" : false;
 
@@ -1374,7 +1381,11 @@ export async function runGameLoop(gameId: string) {
     // ── DAY: Free Discussion (Rebuttal) ──
     const discussionMsg = await narrateDiscussionStart();
     await addSystemMessage(gameId, round, "day_discuss", discussionMsg);
-    for (const player of sortedSpeakers) {
+    for (const speakerId of sortedSpeakerIds) {
+      const currentPlayers = await getAllPlayers(gameId);
+      const player = currentPlayers.find((p) => p.id === speakerId);
+      if (!player || !player.isAlive) continue;
+
       emit({
         type: "thinking",
         gameId,
@@ -1387,7 +1398,7 @@ export async function runGameLoop(gameId: string) {
       const result = await runAgentTurn({
         gameId,
         player,
-        allPlayers: postNightPlayers,
+        allPlayers: currentPlayers,
         phase: "day_discuss",
         round,
         actionType: "speak_rebuttal",
@@ -1411,19 +1422,21 @@ export async function runGameLoop(gameId: string) {
     await delay(TIMING.BEFORE_VOTE);
     await updatePhase(gameId, "day_vote");
     const dayVotes: { voterId: string; targetId: string }[] = [];
+    const preVotePlayers = await getAllPlayers(gameId);
+    const aliveVoters = preVotePlayers.filter((p) => p.isAlive);
 
     // Revealed idiot loses voting rights
     const idiotRevealed = await hasIdiotRevealed(gameId);
-    const idiotPlayer = aliveDayPlayers.find((p) => p.role === "idiot");
+    const idiotPlayer = aliveVoters.find((p) => p.role === "idiot");
     const votingPlayers = idiotRevealed && idiotPlayer
-      ? aliveDayPlayers.filter((p) => p.id !== idiotPlayer.id)
-      : aliveDayPlayers;
+      ? aliveVoters.filter((p) => p.id !== idiotPlayer.id)
+      : aliveVoters;
 
     for (const player of votingPlayers) {
       const result = await runAgentTurn({
         gameId,
         player,
-        allPlayers: postNightPlayers,
+        allPlayers: preVotePlayers,
         phase: "day_vote",
         round,
         actionType: "vote",
@@ -1440,7 +1453,7 @@ export async function runGameLoop(gameId: string) {
             voterId: player.id,
             voterName: player.agentName,
             targetId: result.targetId,
-            targetName: postNightPlayers.find((p) => p.id === result.targetId)?.agentName,
+            targetName: preVotePlayers.find((p) => p.id === result.targetId)?.agentName,
             reason: result.reason,
           },
         });
@@ -1452,7 +1465,7 @@ export async function runGameLoop(gameId: string) {
     const tally: Record<string, string[]> = {};
     for (const v of dayVotes) {
       if (!tally[v.targetId]) tally[v.targetId] = [];
-      const voter = postNightPlayers.find((p) => p.id === v.voterId);
+      const voter = preVotePlayers.find((p) => p.id === v.voterId);
       tally[v.targetId].push(voter?.agentName ?? "?");
     }
     emit({
@@ -1463,7 +1476,7 @@ export async function runGameLoop(gameId: string) {
       data: {
         tally: Object.entries(tally).map(([targetId, voters]) => ({
           targetId,
-          targetName: postNightPlayers.find((p) => p.id === targetId)?.agentName,
+          targetName: preVotePlayers.find((p) => p.id === targetId)?.agentName,
           count: voters.length,
           voters,
         })),
@@ -1472,11 +1485,11 @@ export async function runGameLoop(gameId: string) {
 
     const eliminated = resolveVote(dayVotes);
     const voteTally = Object.entries(tally).map(([targetId, voters]) => ({
-      name: postNightPlayers.find((p) => p.id === targetId)?.agentName ?? "?",
+      name: preVotePlayers.find((p) => p.id === targetId)?.agentName ?? "?",
       votes: voters.length,
     }));
     if (eliminated) {
-      const victim = postNightPlayers.find((p) => p.id === eliminated);
+      const victim = preVotePlayers.find((p) => p.id === eliminated);
       const victimRole = victim?.role as Role | undefined;
 
       // Idiot first-time vote immunity: reveal identity, survive, lose vote rights
@@ -1541,10 +1554,13 @@ export async function runGameLoop(gameId: string) {
           });
           await delay(TIMING.BEFORE_SPEAK);
 
+          const currentPlayersForLastWords = await getAllPlayers(gameId);
+          const victimForLastWords =
+            currentPlayersForLastWords.find((p) => p.id === victim.id) ?? victim;
           const lw = await runAgentTurn({
             gameId,
-            player: victim,
-            allPlayers: postNightPlayers,
+            player: victimForLastWords,
+            allPlayers: currentPlayersForLastWords,
             phase: "day_vote",
             round,
             actionType: "last_words",
