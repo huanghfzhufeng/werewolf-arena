@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
@@ -45,9 +46,12 @@ function UserMenu() {
         className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-surface/50 transition-colors"
       >
         {session.user.image ? (
-          <img
+          <Image
             src={session.user.image}
             alt=""
+            width={24}
+            height={24}
+            unoptimized
             className="w-6 h-6 rounded-full"
           />
         ) : (
