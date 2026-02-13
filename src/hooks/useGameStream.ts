@@ -20,7 +20,7 @@ export function useGameStream(
     onEventRef.current = onEvent;
   }, [onEvent]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(function connectStream() {
     if (!gameId) return;
 
     const eventSource = new EventSource(`/api/stream/${gameId}`);
@@ -41,7 +41,7 @@ export function useGameStream(
       setReconnecting(true);
       const delay = retryDelayRef.current;
       retryDelayRef.current = Math.min(delay * 2, MAX_RETRY_MS);
-      retryTimerRef.current = setTimeout(connect, delay);
+      retryTimerRef.current = setTimeout(connectStream, delay);
     };
 
     const eventTypes = [
