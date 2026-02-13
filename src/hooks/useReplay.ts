@@ -40,18 +40,18 @@ export function useReplay(
   const [speed, setSpeed] = useState<ReplaySpeed>(1);
   const [loading, setLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pointerRef = useRef(pointer);
-  pointerRef.current = pointer;
 
   // Load replay data
   useEffect(() => {
     if (!enabled) {
-      setTimeline([]);
-      setPointer(0);
-      setIsPlaying(false);
+      queueMicrotask(() => {
+        setTimeline([]);
+        setPointer(0);
+        setIsPlaying(false);
+      });
       return;
     }
-    setLoading(true);
+    queueMicrotask(() => setLoading(true));
     fetch(`/api/games/${gameId}/replay`)
       .then((r) => r.json())
       .then((data) => {
@@ -62,7 +62,7 @@ export function useReplay(
         }
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => queueMicrotask(() => setLoading(false)));
   }, [gameId, enabled]);
 
   // Playback timer
@@ -88,10 +88,10 @@ export function useReplay(
 
   // Auto-pause when reaching the end
   useEffect(() => {
-    if (pointer >= timeline.length && timeline.length > 0) {
-      setIsPlaying(false);
+    if (isPlaying && pointer >= timeline.length && timeline.length > 0) {
+      queueMicrotask(() => setIsPlaying(false));
     }
-  }, [pointer, timeline.length]);
+  }, [isPlaying, pointer, timeline.length]);
 
   const play = useCallback(() => {
     if (pointer >= timeline.length) setPointer(0);

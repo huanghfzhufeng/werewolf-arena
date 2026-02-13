@@ -49,7 +49,7 @@ export default function LeaderboardPage() {
   }, [page, sort]);
 
   useEffect(() => {
-    fetchData();
+    queueMicrotask(fetchData);
   }, [fetchData]);
 
   return (

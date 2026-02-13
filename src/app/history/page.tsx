@@ -45,7 +45,7 @@ export default function HistoryPage() {
   }, [page]);
 
   useEffect(() => {
-    fetchData();
+    queueMicrotask(fetchData);
   }, [fetchData]);
 
   if (loading && games.length === 0) return <LoadingSkeleton variant="list" />;

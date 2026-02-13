@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, use } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, CheckCircle, XCircle, Loader2 } from "lucide-react";
 
@@ -11,24 +12,17 @@ export default function ClaimPage({
 }) {
   const { id } = use(params);
   const { data: session, status: sessionStatus } = useSession();
-  const [state, setState] = useState<"loading" | "success" | "error" | "login_required">("loading");
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token");
+  const callbackUrl = `/claim/${id}${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+
+  const [state, setState] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("");
   const [agentName, setAgentName] = useState("");
 
   useEffect(() => {
-    if (sessionStatus === "loading") return;
-
-    if (!session?.user) {
-      setState("login_required");
-      return;
-    }
-
-    const token = new URLSearchParams(window.location.search).get("token");
-    if (!token) {
-      setState("error");
-      setMessage("缺少认领令牌。");
-      return;
-    }
+    if (sessionStatus !== "authenticated") return;
+    if (!token) return;
 
     fetch(`/api/dashboard/claim`, {
       method: "POST",
@@ -49,7 +43,17 @@ export default function ClaimPage({
         setState("error");
         setMessage("网络错误。");
       });
-  }, [id, session, sessionStatus]);
+  }, [id, token, sessionStatus]);
+
+  const viewState: "loading" | "success" | "error" | "login_required" =
+    sessionStatus === "loading"
+      ? "loading"
+      : !session?.user
+        ? "login_required"
+        : !token
+          ? "error"
+          : state;
+  const errorMessage = token ? message : "缺少认领令牌。";
 
   return (
     <div className="max-w-md mx-auto px-4 py-16">
@@ -62,14 +66,14 @@ export default function ClaimPage({
       </Link>
 
       <div className="card p-8 text-center">
-        {state === "loading" && (
+        {viewState === "loading" && (
           <>
             <Loader2 size={32} className="mx-auto mb-4 animate-spin text-text-muted" />
             <p className="text-text-secondary">认领中...</p>
           </>
         )}
 
-        {state === "login_required" && (
+        {viewState === "login_required" && (
           <>
             <div className="text-4xl mb-4">🔑</div>
             <h2 className="text-xl font-bold mb-2">需要登录</h2>
@@ -77,7 +81,7 @@ export default function ClaimPage({
               请使用 GitHub 登录以认领此 Agent。
             </p>
             <Link
-              href={`/login?callbackUrl=${encodeURIComponent(`/claim/${id}${window.location.search}`)}`}
+              href={`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
               style={{ background: "#24292f", color: "#fff" }}
             >
@@ -86,7 +90,7 @@ export default function ClaimPage({
           </>
         )}
 
-        {state === "success" && (
+        {viewState === "success" && (
           <>
             <CheckCircle size={32} className="mx-auto mb-4 text-arena-green" />
             <h2 className="text-xl font-bold mb-2">认领成功！</h2>
@@ -102,11 +106,11 @@ export default function ClaimPage({
           </>
         )}
 
-        {state === "error" && (
+        {viewState === "error" && (
           <>
             <XCircle size={32} className="mx-auto mb-4 text-wolf" />
             <h2 className="text-xl font-bold mb-2">认领失败</h2>
-            <p className="text-text-secondary text-sm">{message}</p>
+            <p className="text-text-secondary text-sm">{errorMessage}</p>
           </>
         )}
       </div>
