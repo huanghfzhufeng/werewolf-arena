@@ -4,7 +4,6 @@ import type { Player } from "@/db/schema";
 import { ROLE_CONFIGS } from "@/engine/roles";
 import type { Role } from "@/engine/roles";
 import { chatCompletion } from "@/agents/llm-client";
-import { emitCommunity } from "@/community/community-events";
 import { loadConfig } from "@/config";
 import { createLogger } from "@/lib";
 import { eq, asc } from "drizzle-orm";

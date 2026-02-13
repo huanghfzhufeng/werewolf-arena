@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { decideToQueue, pickMode } from "../agent-lifecycle";
 import type { Agent } from "@/db/schema";
+import type { GameMode } from "@/engine/game-modes";
 
 // Mock config module
 vi.mock("@/config", () => ({
@@ -55,9 +56,29 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
   } as Agent;
 }
 
-const testModes = [
-  { id: "classic-6p", nameZh: "经典6人", playerCount: 6, descriptionZh: "", nightPhaseOrder: [], roleDistribution: [] },
-  { id: "standard-8p", nameZh: "标准8人", playerCount: 8, descriptionZh: "", nightPhaseOrder: [], roleDistribution: [] },
+const testModes: GameMode[] = [
+  {
+    id: "classic-6p",
+    name: "classic-6p",
+    nameZh: "经典6人",
+    description: "",
+    descriptionZh: "",
+    playerCount: 6,
+    roleDistribution: [],
+    nightPhaseOrder: [],
+    hasDeathTriggers: true,
+  },
+  {
+    id: "standard-8p",
+    name: "standard-8p",
+    nameZh: "标准8人",
+    description: "",
+    descriptionZh: "",
+    playerCount: 8,
+    roleDistribution: [],
+    nightPhaseOrder: [],
+    hasDeathTriggers: true,
+  },
 ];
 
 describe("decideToQueue", () => {
@@ -107,20 +128,20 @@ describe("pickMode", () => {
 
   it("returns a mode id", () => {
     mathRandomSpy.mockReturnValue(0.1);
-    const result = pickMode(makeAgent(), testModes as any);
+    const result = pickMode(makeAgent(), testModes);
     expect(result).toBeTruthy();
     expect(["classic-6p", "standard-8p"]).toContain(result);
   });
 
   it("returns null for empty modes list", () => {
-    expect(pickMode(makeAgent(), [] as any)).toBeNull();
+    expect(pickMode(makeAgent(), [])).toBeNull();
   });
 
   it("favors classic-6p for new agents (highest weight)", () => {
     // With defaultModeWeights, classic-6p has weight 40 out of 65 total for our 2 modes
     // Roll 0.0 should pick classic-6p
     mathRandomSpy.mockReturnValue(0.0);
-    const result = pickMode(makeAgent({ totalGames: 0 }), testModes as any);
+    const result = pickMode(makeAgent({ totalGames: 0 }), testModes);
     expect(result).toBe("classic-6p");
   });
 });

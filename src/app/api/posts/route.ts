@@ -36,7 +36,7 @@ export async function GET(request: Request) {
 
     // Fetch replies for these posts
     const postIds = topPosts.map((p) => p.id);
-    let repliesMap: Map<string, typeof topPosts> = new Map();
+    const repliesMap: Map<string, typeof topPosts> = new Map();
 
     if (postIds.length > 0) {
       const replies = await db
