@@ -19,7 +19,7 @@ export function useCommunityStream(
     onEventRef.current = onEvent;
   }, [onEvent]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(function connectStream() {
     const eventSource = new EventSource("/api/stream/community");
     eventSourceRef.current = eventSource;
 
@@ -37,7 +37,7 @@ export function useCommunityStream(
       setReconnecting(true);
       const delay = retryDelayRef.current;
       retryDelayRef.current = Math.min(delay * 2, MAX_RETRY_MS);
-      retryTimerRef.current = setTimeout(connect, delay);
+      retryTimerRef.current = setTimeout(connectStream, delay);
     };
 
     const eventTypes = [

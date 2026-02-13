@@ -35,9 +35,6 @@ export function ChatFeed({
 
   const thinkingPlayerInfo = thinkingPlayerId ? getPlayer(thinkingPlayerId) : null;
 
-
-  let lastRound = -1;
-
   return (
     <div className="lg:col-span-3">
       <div className="card p-4">
@@ -48,15 +45,15 @@ export function ChatFeed({
         </div>
 
         <div className="max-h-[60vh] md:max-h-[550px] overflow-y-auto space-y-2 pr-1">
-          {feed.map((item) => {
+          {feed.map((item, index) => {
             const speaker = getPlayer(item.playerId);
+            const previousRound = index > 0 ? feed[index - 1]?.round ?? -1 : -1;
 
             // Round separator
-            let separator = null;
-            if (item.round > lastRound && item.round > 0) {
-              separator = <RoundSeparator key={`round-${item.round}`} round={item.round} />;
-            }
-            lastRound = item.round;
+            const separator =
+              item.round > previousRound && item.round > 0
+                ? <RoundSeparator key={`round-${item.round}`} round={item.round} />
+                : null;
 
             // Atmosphere
             if (item.kind === "atmosphere") {
