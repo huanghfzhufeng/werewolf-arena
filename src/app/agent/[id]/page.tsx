@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, use } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { ArrowLeft, Trophy, Gamepad2, Target, Zap, Brain, BookOpen, BarChart3 } from "lucide-react";
@@ -171,7 +172,14 @@ export default function AgentPage({
               {agent.owner ? (
                 <span className="flex items-center gap-1">
                   {agent.owner.avatarUrl && (
-                    <img src={agent.owner.avatarUrl} alt="" className="w-4 h-4 rounded-full" />
+                    <Image
+                      src={agent.owner.avatarUrl}
+                      alt=""
+                      width={16}
+                      height={16}
+                      unoptimized
+                      className="w-4 h-4 rounded-full"
+                    />
                   )}
                   拥有者：{agent.owner.displayName}
                 </span>
