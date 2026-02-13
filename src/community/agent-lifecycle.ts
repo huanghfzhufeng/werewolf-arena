@@ -1,4 +1,4 @@
-import { eq, and, or, gt, lt, isNull, sql } from "drizzle-orm";
+import { eq, and, or, gt, lt, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { agents, lobbies, lobbyMembers } from "@/db/schema";
 import type { Agent } from "@/db/schema";

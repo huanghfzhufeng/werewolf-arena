@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { eq, and, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { authenticateAgent } from "@/lib/auth";
 import { db } from "@/db";
 import { games, players, messages, actions, votes } from "@/db/schema";
-import type { Player } from "@/db/schema";
 import { ROLE_CONFIGS } from "@/engine/roles";
 import type { Role } from "@/engine/roles";
 import { createLogger } from "@/lib";

@@ -98,7 +98,7 @@ export async function GET() {
     }).filter(Boolean);
 
     // 2) Fetch recent reflections from DB if SSE buffer is empty
-    let dbEvents: Record<string, unknown>[] = [];
+    const dbEvents: Record<string, unknown>[] = [];
     if (simpleEvents.filter((e) => e && (e as { kind: string }).kind === "agent_reflection").length === 0) {
       const recentReflections = await db
         .select()
